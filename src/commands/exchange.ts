@@ -13,26 +13,38 @@ export async function exchangeCommand(command: ParsedCommand) {
 
   if (action === 'balance') {
     const response = await client.request<any>('/api/cli/exchange/balance');
-    if (command.flags.json) return printJson(response.data);
-    console.log(`credits: ${response.data.credits.total} (purchase ${response.data.credits.purchase}, gift ${response.data.credits.gift})`);
-    table(response.data.tokens.map((token: any) => ({
+    const rows = response.data.tokens.map((token: any) => ({
       agent: token.agent_id,
       balance: token.token_balance,
       onsale: token.token_onsale,
       price: token.resell_price ?? ''
-    })));
+    }));
+    if (command.flags.json) {
+      return printJson({
+        credits: response.data.credits.total,
+        purchase: response.data.credits.purchase,
+        gift: response.data.credits.gift,
+        tokens: rows
+      });
+    }
+    console.log(`credits: ${response.data.credits.total} (purchase ${response.data.credits.purchase}, gift ${response.data.credits.gift})`);
+    table(rows);
     return;
   }
 
   if (action === 'owned') {
     const response = await client.request<any>('/api/cli/exchange/owned');
-    if (command.flags.json) return printJson(response.data.agents);
-    table(response.data.agents.map((agent: any) => ({
+    const jsonRows = response.data.agents.map((agent: any) => ({
       agent: agent.agent_id,
-      name: truncate(agent.agent_name, 30),
+      name: agent.agent_name,
       balance: agent.token_balance,
       onsale: agent.token_onsale,
       price: agent.resell_price ?? ''
+    }));
+    if (command.flags.json) return printJson(jsonRows);
+    table(jsonRows.map((agent: any) => ({
+      ...agent,
+      name: truncate(agent.name, 30)
     })));
     return;
   }
@@ -41,13 +53,18 @@ export async function exchangeCommand(command: ParsedCommand) {
     const response = await client.request<any>('/api/cli/exchange/listings', {
       query: { agent_id: flagNumber(command.flags, 'agent') }
     });
-    if (command.flags.json) return printJson(response.data.listings);
-    table(response.data.listings.map((listing: any) => ({
+    const jsonRows = response.data.listings.map((listing: any) => ({
       agent: listing.agent_id,
-      seller: truncate(listing.seller_username, 20),
+      seller: listing.seller_username,
       tokens: listing.token_onsale,
       price: listing.resell_price,
-      author: truncate(listing.model_author, 24)
+      author: listing.model_author
+    }));
+    if (command.flags.json) return printJson(jsonRows);
+    table(jsonRows.map((listing: any) => ({
+      ...listing,
+      seller: truncate(listing.seller, 20),
+      author: truncate(listing.author, 24)
     })));
     return;
   }
@@ -62,7 +79,13 @@ export async function exchangeCommand(command: ParsedCommand) {
     const response = await client.request<any>('/api/cli/exchange/buy', {
       body: { agent_id: agentId, tokens, max_price: maxPrice }
     });
-    return printJson(response.data);
+    return printJson({
+      agent: response.data.agent_id,
+      tokens_bought: response.data.tokens_bought,
+      tokens_remaining: response.data.tokens_remaining,
+      credits_used: response.data.credits_used?.total,
+      status: response.data.status
+    });
   }
 
   if (action === 'sell') {
@@ -75,7 +98,11 @@ export async function exchangeCommand(command: ParsedCommand) {
     const response = await client.request<any>('/api/cli/exchange/sell', {
       body: { agent_id: agentId, tokens, price }
     });
-    return printJson(response.data);
+    return printJson({
+      agent: response.data.agent_id,
+      onsale: response.data.token_onsale,
+      price: response.data.resell_price
+    });
   }
 
   throw new Error(`Unknown exchange action: ${action}`);

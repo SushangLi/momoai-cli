@@ -11,19 +11,25 @@ export async function runCommand(command: ParsedCommand) {
 
   const response = await new MomoClient().request<any>(`/api/cli/agents/${agentId}/run-info`);
   const info = response.data;
+  const key = loadConfig().account?.momoKey || '<momo_key>';
+  const model = String(agentId);
+  const curl = [
+    `curl -X POST "${info.baseurl}" \\`,
+    `  -H "Authorization: Bearer ${key}" \\`,
+    '  -H "Content-Type: application/json" \\',
+    `  -d '{"model":"${model}","messages":[{"role":"user","content":"Hello"}]}'`
+  ].join('\n');
 
   if (command.flags.json) {
-    printJson(info);
+    printJson({
+      baseurl: info.baseurl,
+      curl
+    });
     return;
   }
 
-  const key = loadConfig().account?.momoKey || '<momo_key>';
-  const model = String(agentId);
   console.log(`baseurl: ${info.baseurl}`);
   console.log('');
   console.log('openai-compatible curl:');
-  console.log(`curl -X POST "${info.baseurl}" \\`);
-  console.log(`  -H "Authorization: Bearer ${key}" \\`);
-  console.log('  -H "Content-Type: application/json" \\');
-  console.log(`  -d '{"model":"${model}","messages":[{"role":"user","content":"Hello"}]}'`);
+  console.log(curl);
 }

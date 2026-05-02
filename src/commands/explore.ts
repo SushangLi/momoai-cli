@@ -17,16 +17,23 @@ export async function exploreCommand(command: ParsedCommand) {
   });
 
   const agents = response.data?.agents || [];
+  const jsonRows = agents.map((agent: any) => ({
+    id: agent.id,
+    name: agent.name,
+    price: `${agent.price}/${agent.price_unit}`,
+    model: agent.model_call_name,
+    intro: agent.intro
+  }));
+
   if (command.flags.json) {
-    printJson(agents);
+    printJson(jsonRows);
     return;
   }
 
-  table(agents.map((agent: any) => ({
-    id: agent.id,
+  table(jsonRows.map((agent: any) => ({
+    ...agent,
     name: truncate(agent.name, 28),
-    price: `${agent.price}/${agent.price_unit}`,
-    model: truncate(agent.model_call_name, 24),
+    model: truncate(agent.model, 24),
     intro: truncate(agent.intro, 56)
   })));
 }
