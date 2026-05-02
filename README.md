@@ -53,7 +53,7 @@ momoai> $explore image --limit 5
 Get OpenAI-compatible run information:
 
 ```text
-momoai> $run 162
+momoai> $run 237
 ```
 
 Exit:
@@ -142,7 +142,7 @@ Shows resale listings.
 
 ```text
 momoai> $exchange listings
-momoai> $exchange listings --agent 162
+momoai> $exchange listings --agent 237
 ```
 
 ### `$exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>`
@@ -150,7 +150,7 @@ momoai> $exchange listings --agent 162
 Buys tokens for an agent using eligible listings up to your max price.
 
 ```text
-momoai> $exchange buy 162 --tokens 1000 --max-price 5
+momoai> $exchange buy 237 --tokens 1000 --max-price 5
 ```
 
 ### `$exchange sell <agent_id> --tokens <n> --price <credits_per_k>`
@@ -158,7 +158,7 @@ momoai> $exchange buy 162 --tokens 1000 --max-price 5
 Lists owned tokens for resale.
 
 ```text
-momoai> $exchange sell 162 --tokens 1000 --price 6
+momoai> $exchange sell 237 --tokens 1000 --price 6
 ```
 
 ### `$run <agent_id> [--json]`
@@ -166,7 +166,7 @@ momoai> $exchange sell 162 --tokens 1000 --price 6
 Shows an OpenAI-compatible curl example for running an agent. The `model` value is the numeric `agent_id`.
 
 ```text
-momoai> $run 162
+momoai> $run 237
 ```
 
 Example output:
@@ -175,7 +175,7 @@ Example output:
 curl -X POST "https://hub.momoai.pro/api/agent-proxy" \
   -H "Authorization: Bearer momo_..." \
   -H "Content-Type: application/json" \
-  -d '{"model":"162","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"237","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 ## Tab Completion
@@ -251,7 +251,7 @@ momoai> $explore image --limit 5
 查看 OpenAI 兼容调用方式：
 
 ```text
-momoai> $run 162
+momoai> $run 237
 ```
 
 退出：
@@ -340,7 +340,7 @@ momoai> $exchange owned
 
 ```text
 momoai> $exchange listings
-momoai> $exchange listings --agent 162
+momoai> $exchange listings --agent 237
 ```
 
 ### `$exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>`
@@ -348,7 +348,7 @@ momoai> $exchange listings --agent 162
 在最高可接受价格内购买某个 Agent 的 tokens。
 
 ```text
-momoai> $exchange buy 162 --tokens 1000 --max-price 5
+momoai> $exchange buy 237 --tokens 1000 --max-price 5
 ```
 
 ### `$exchange sell <agent_id> --tokens <n> --price <credits_per_k>`
@@ -356,7 +356,7 @@ momoai> $exchange buy 162 --tokens 1000 --max-price 5
 把自己拥有的 tokens 挂出转卖。
 
 ```text
-momoai> $exchange sell 162 --tokens 1000 --price 6
+momoai> $exchange sell 237 --tokens 1000 --price 6
 ```
 
 ### `$run <agent_id> [--json]`
@@ -364,7 +364,7 @@ momoai> $exchange sell 162 --tokens 1000 --price 6
 显示 OpenAI 兼容的 curl 调用示例。`model` 使用数字形式的 `agent_id`。
 
 ```text
-momoai> $run 162
+momoai> $run 237
 ```
 
 示例输出：
@@ -373,7 +373,7 @@ momoai> $run 162
 curl -X POST "https://hub.momoai.pro/api/agent-proxy" \
   -H "Authorization: Bearer momo_..." \
   -H "Content-Type: application/json" \
-  -d '{"model":"162","messages":[{"role":"user","content":"Hello"}]}'
+  -d '{"model":"237","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
 ## Tab 补全
