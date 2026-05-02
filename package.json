@@ -1,0 +1,21 @@
+{
+  "name": "momoai-cli",
+  "version": "0.1.0",
+  "description": "Interactive CLI for MOMO AI minimum workflows",
+  "type": "module",
+  "bin": {
+    "momoai": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  }
+}
