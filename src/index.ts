@@ -10,7 +10,12 @@ import { exploreCommand } from './commands/explore.js';
 import { exchangeCommand } from './commands/exchange.js';
 import { runCommand } from './commands/run.js';
 import { configCommand } from './commands/config.js';
+import { modelCommand } from './commands/model.js';
 import { completer } from './completion.js';
+import { sendChat } from './chat.js';
+import { loadConfig } from './config.js';
+
+const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'run', 'config', 'help', 'quit']);
 
 function help() {
   console.log(`Commands:
@@ -21,10 +26,13 @@ function help() {
   $exchange listings [--agent <agent_id>] [--json]
   $exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>
   $exchange sell <agent_id> --tokens <n> --price <credits_per_k>
+  $model [model]
   $run <agent_id> [--json]
   $config show
   $config reset key
-  $quit`);
+  $quit
+
+In interactive CLI, text without $ is sent to the current $model.`);
 }
 
 async function dispatch(command: ParsedCommand) {
@@ -39,6 +47,8 @@ async function dispatch(command: ParsedCommand) {
       return runCommand(command);
     case 'config':
       return configCommand(command);
+    case 'model':
+      return modelCommand(command);
     case 'help':
       return help();
     case 'quit':
@@ -49,6 +59,13 @@ async function dispatch(command: ParsedCommand) {
 }
 
 async function runLine(line: string) {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  if (!trimmed.startsWith('$')) {
+    await sendChat(trimmed);
+    return;
+  }
+
   const command = parseCommand(line);
   if (!command) return;
   await dispatch(command);
@@ -57,12 +74,18 @@ async function runLine(line: string) {
 async function main() {
   const direct = process.argv.slice(2).join(' ');
   if (direct) {
-    await runLine(direct.startsWith('$') ? direct : `$${direct}`);
+    const firstToken = direct.trim().split(/\s+/)[0].replace(/^\$/, '');
+    if (direct.trim().startsWith('$') || cliCommands.has(firstToken)) {
+      await runLine(direct.startsWith('$') ? direct : `$${direct}`);
+    } else {
+      await sendChat(direct);
+    }
     return;
   }
 
   console.log('MOMOAI CLI. Run $help for commands.');
-  const rl = createInterface({ input, output, prompt: 'momoai> ', completer });
+  console.log(`Current model: ${loadConfig().model}. Run $model to view or change models.`);
+  const rl = createInterface({ input, output, prompt: `momoai (${loadConfig().model})> `, completer });
   rl.prompt();
 
   for await (const line of rl) {
@@ -75,6 +98,7 @@ async function main() {
         console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    rl.setPrompt(`momoai (${loadConfig().model})> `);
     rl.prompt();
   }
 }

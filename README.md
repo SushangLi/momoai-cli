@@ -3,6 +3,7 @@
 English | [中文](#中文)
 
 MOMOAI CLI is an interactive command-line tool for MOMO AI. Commands inside the CLI start with `$`.
+Text entered without `$` is sent to the selected model as an OpenAI-compatible chat request.
 
 ## Requirements
 
@@ -67,6 +68,25 @@ Get OpenAI-compatible run information:
 momoai> $run 237
 ```
 
+Choose the chat model:
+
+```text
+momoai> $model
+momoai> $model momo_237
+```
+
+Chat with the selected model:
+
+```text
+momoai> hello
+```
+
+Outside the interactive CLI, text that does not start with a CLI command is also sent as chat:
+
+```bash
+momoai hello
+```
+
 Exit:
 
 ```text
@@ -91,6 +111,8 @@ The stored config includes:
 
 ```json
 {
+  "model": "momo_237",
+  "defaultModels": ["momo_237"],
   "account": {
     "email": "...",
     "username": "...",
@@ -172,6 +194,33 @@ Lists owned tokens for resale.
 momoai> $exchange sell 237 --tokens 1000 --price 6
 ```
 
+### `$model [model]`
+
+Shows or changes the model used for chat input. The default model is `momo_237`.
+
+`defaultModels` are advertised models shown even before you buy tokens. Other models are shown from your `$exchange balance` list. Negative balances are still valid for selection.
+
+Accepted examples:
+
+```text
+momoai> $model
+momoai> $model 237
+momoai> $model momo_237
+```
+
+After setting a model, any interactive line that does not start with `$` is sent to `/v1/chat/completions` with this OpenAI-compatible body:
+
+```json
+{
+  "model": "momo_237",
+  "messages": [{ "role": "user", "content": "hello" }]
+}
+```
+
+Outside the interactive CLI, `momoai hello` uses the same chat path. If the first word is a CLI command such as `exchange` or `config`, it runs that command instead.
+
+If an advertised default model has no tokens yet, the chat request may ask you to buy tokens first.
+
 ### `$run <agent_id> [--json]`
 
 Shows an OpenAI-compatible curl example for running an agent. The `model` value is the numeric `agent_id`.
@@ -212,6 +261,7 @@ $config reset <Tab> -> key
 # 中文
 
 MOMOAI CLI 是 MOMO AI 的交互式命令行工具。CLI 内部命令都以 `$` 开头。
+不以 `$` 开头的输入会作为 OpenAI 兼容聊天请求发送给当前选择的模型。
 
 ## 环境要求
 
@@ -276,6 +326,25 @@ momoai> $explore image --limit 5
 momoai> $run 237
 ```
 
+选择聊天模型：
+
+```text
+momoai> $model
+momoai> $model momo_237
+```
+
+和当前模型对话：
+
+```text
+momoai> hello
+```
+
+在普通终端里，如果输入内容不是 CLI 命令，也会作为聊天发送：
+
+```bash
+momoai hello
+```
+
 退出：
 
 ```text
@@ -300,6 +369,8 @@ momocli-yyyymmdd-xxxx@gmail.com
 
 ```json
 {
+  "model": "momo_237",
+  "defaultModels": ["momo_237"],
   "account": {
     "email": "...",
     "username": "...",
@@ -380,6 +451,33 @@ momoai> $exchange buy 237 --tokens 1000 --max-price 5
 ```text
 momoai> $exchange sell 237 --tokens 1000 --price 6
 ```
+
+### `$model [model]`
+
+查看或切换聊天输入使用的模型。默认模型是 `momo_237`。
+
+`defaultModels` 是展示用的推荐模型，即使你还没有购买 tokens，也会出现在模型列表里。其他模型来自你的 `$exchange balance` 列表。余额为负数也可以选择。
+
+可接受的写法：
+
+```text
+momoai> $model
+momoai> $model 237
+momoai> $model momo_237
+```
+
+设置模型后，交互式 CLI 里任何不以 `$` 开头的输入，都会发送到 `/v1/chat/completions`，请求体为 OpenAI 兼容格式：
+
+```json
+{
+  "model": "momo_237",
+  "messages": [{ "role": "user", "content": "hello" }]
+}
+```
+
+在普通终端里，`momoai hello` 也会走同样的聊天流程。如果第一个词是 `exchange` 或 `config` 等 CLI 命令，则会执行对应命令。
+
+如果推荐模型还没有 tokens，聊天请求可能会提示你先购买 tokens。
 
 ### `$run <agent_id> [--json]`
 

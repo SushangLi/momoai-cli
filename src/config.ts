@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 
 export interface CliConfig {
   apiUrl: string;
+  model: string;
+  defaultModels: string[];
   account?: {
     email: string;
     username: string;
@@ -21,7 +23,9 @@ export interface CliConfig {
 
 const configPath = join(homedir(), '.momoai-cli', 'config.json');
 const defaultConfig: CliConfig = {
-  apiUrl: 'https://hub.momoai.pro'
+  apiUrl: 'https://hub.momoai.pro',
+  model: 'momo_237',
+  defaultModels: ['momo_237']
 };
 
 function readStoredConfig(): Partial<CliConfig> {
@@ -51,6 +55,8 @@ export function loadConfig(): CliConfig {
 
   return {
     apiUrl: (process.env.MOMOAI_API_URL || stored.apiUrl || defaultConfig.apiUrl).replace(/\/$/, ''),
+    model: stored.model || defaultConfig.model,
+    defaultModels: stored.defaultModels?.length ? stored.defaultModels : defaultConfig.defaultModels,
     account,
     pendingRegistration: stored.pendingRegistration
   };
@@ -66,6 +72,12 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
 
   if (merged.apiUrl) {
     merged.apiUrl = merged.apiUrl.replace(/\/$/, '');
+  }
+  if (!merged.model) {
+    merged.model = defaultConfig.model;
+  }
+  if (!merged.defaultModels?.length) {
+    merged.defaultModels = defaultConfig.defaultModels;
   }
 
   mkdirSync(dirname(configPath), { recursive: true });

@@ -6,7 +6,7 @@ type Rule = {
   subcommandFlags?: Record<string, string[]>;
 };
 
-const commands = ['register', 'explore', 'exchange', 'run', 'config', 'help', 'quit'];
+const commands = ['register', 'explore', 'exchange', 'model', 'run', 'config', 'help', 'quit'];
 
 const rules: Record<string, Rule> = {
   register: {
@@ -25,6 +25,9 @@ const rules: Record<string, Rule> = {
       buy: ['--tokens', '--max-price'],
       sell: ['--tokens', '--price']
     }
+  },
+  model: {
+    subcommands: []
   },
   run: {
     flags: ['--json']

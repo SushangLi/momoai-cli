@@ -43,6 +43,8 @@ export async function configCommand(command: ParsedCommand) {
   if (!action || action === 'show') {
     const config = loadConfig();
     console.log(`apiUrl: ${config.apiUrl}`);
+    console.log(`model: ${config.model}`);
+    console.log(`defaultModels: ${config.defaultModels.join(', ')}`);
     console.log(`account.email: ${config.account?.email || '(not set)'}`);
     console.log(`account.username: ${config.account?.username || '(not set)'}`);
     console.log(`account.password: ${config.account?.password || '(not set)'}`);

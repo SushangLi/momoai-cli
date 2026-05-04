@@ -60,7 +60,8 @@ export class MomoClient {
     }
 
     if (!response.ok || payload.success === false) {
-      throw new CliError(payload.error || payload.message || `HTTP ${response.status}`, response.status);
+      const message = payload.error?.message || payload.error || payload.message || `HTTP ${response.status}`;
+      throw new CliError(message, response.status);
     }
 
     return payload as T;
