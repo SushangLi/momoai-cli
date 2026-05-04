@@ -28,6 +28,18 @@ Start the CLI:
 momoai
 ```
 
+There are two equivalent ways to run commands:
+
+```text
+momoai> $exchange buy 237 --tokens 1000 --max-price 5
+```
+
+```bash
+momoai exchange buy 237 --tokens 1000 --max-price 5
+```
+
+Use the leading `$` only inside the interactive CLI. Outside the CLI, start with `momoai` and omit `$`.
+
 Register a generated CLI account:
 
 ```text
@@ -152,12 +164,6 @@ Buys tokens for an agent using eligible listings up to your max price.
 momoai> $exchange buy 237 --tokens 1000 --max-price 5
 ```
 
-You can also run the same command directly outside the interactive CLI. Omit the leading `$`:
-
-```bash
-momoai exchange buy 216 --tokens 200 --max-price 10
-```
-
 ### `$exchange sell <agent_id> --tokens <n> --price <credits_per_k>`
 
 Lists owned tokens for resale.
@@ -230,6 +236,18 @@ momoai
 ```bash
 momoai
 ```
+
+命令有两种等价执行方式：
+
+```text
+momoai> $exchange buy 237 --tokens 1000 --max-price 5
+```
+
+```bash
+momoai exchange buy 237 --tokens 1000 --max-price 5
+```
+
+只有在交互式 CLI 里才需要写开头的 `$`。在普通终端里执行时，以 `momoai` 开头，不要写 `$`。
 
 注册一个自动生成的 CLI 账号：
 
@@ -353,12 +371,6 @@ momoai> $exchange listings --agent 237
 
 ```text
 momoai> $exchange buy 237 --tokens 1000 --max-price 5
-```
-
-也可以不进入交互式 CLI，直接在终端执行同一个命令。此时不要写开头的 `$`：
-
-```bash
-momoai exchange buy 216 --tokens 200 --max-price 10
 ```
 
 ### `$exchange sell <agent_id> --tokens <n> --price <credits_per_k>`
