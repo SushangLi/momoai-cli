@@ -11,11 +11,13 @@ import { exchangeCommand } from './commands/exchange.js';
 import { runCommand } from './commands/run.js';
 import { configCommand } from './commands/config.js';
 import { modelCommand } from './commands/model.js';
+import { permissionCommand } from './commands/permission.js';
 import { completer } from './completion.js';
 import { sendChat } from './chat.js';
 import { loadConfig } from './config.js';
+import type { ConfirmTool } from './tools.js';
 
-const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'run', 'config', 'help', 'quit']);
+const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'help', 'quit']);
 
 function help() {
   console.log(`Commands:
@@ -27,6 +29,7 @@ function help() {
   $exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>
   $exchange sell <agent_id> --tokens <n> --price <credits_per_k>
   $model [model]
+  $permission part|full
   $run <agent_id> [--json]
   $config show
   $config reset key
@@ -49,6 +52,8 @@ async function dispatch(command: ParsedCommand) {
       return configCommand(command);
     case 'model':
       return modelCommand(command);
+    case 'permission':
+      return permissionCommand(command);
     case 'help':
       return help();
     case 'quit':
@@ -58,11 +63,11 @@ async function dispatch(command: ParsedCommand) {
   }
 }
 
-async function runLine(line: string) {
+async function runLine(line: string, confirmTool?: ConfirmTool) {
   const trimmed = line.trim();
   if (!trimmed) return;
   if (!trimmed.startsWith('$')) {
-    await sendChat(trimmed);
+    await sendChat(trimmed, confirmTool);
     return;
   }
 
@@ -86,11 +91,16 @@ async function main() {
   console.log('MOMOAI CLI. Run $help for commands.');
   console.log(`Current model: ${loadConfig().model}. Run $model to view or change models.`);
   const rl = createInterface({ input, output, prompt: `momoai (${loadConfig().model})> `, completer });
+  const confirmTool: ConfirmTool = async (toolName, args) => {
+    if (!input.isTTY) return false;
+    const answer = await rl.question(`Tool request: ${toolName} ${JSON.stringify(args)}\nRun this tool? y/N `);
+    return answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes';
+  };
   rl.prompt();
 
   for await (const line of rl) {
     try {
-      await runLine(line);
+      await runLine(line, confirmTool);
     } catch (error) {
       if (error instanceof CliError && error.status) {
         console.error(`Error ${error.status}: ${error.message}`);

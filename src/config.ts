@@ -6,6 +6,7 @@ export interface CliConfig {
   apiUrl: string;
   model: string;
   defaultModels: string[];
+  permissionMode: 'part' | 'full';
   account?: {
     email: string;
     username: string;
@@ -25,7 +26,8 @@ const configPath = join(homedir(), '.momoai-cli', 'config.json');
 const defaultConfig: CliConfig = {
   apiUrl: 'https://hub.momoai.pro',
   model: 'momo_237',
-  defaultModels: ['momo_237']
+  defaultModels: ['momo_237'],
+  permissionMode: 'part'
 };
 
 function readStoredConfig(): Partial<CliConfig> {
@@ -57,6 +59,7 @@ export function loadConfig(): CliConfig {
     apiUrl: (process.env.MOMOAI_API_URL || stored.apiUrl || defaultConfig.apiUrl).replace(/\/$/, ''),
     model: stored.model || defaultConfig.model,
     defaultModels: stored.defaultModels?.length ? stored.defaultModels : defaultConfig.defaultModels,
+    permissionMode: stored.permissionMode === 'full' ? 'full' : defaultConfig.permissionMode,
     account,
     pendingRegistration: stored.pendingRegistration
   };
@@ -78,6 +81,9 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
   }
   if (!merged.defaultModels?.length) {
     merged.defaultModels = defaultConfig.defaultModels;
+  }
+  if (merged.permissionMode !== 'full') {
+    merged.permissionMode = defaultConfig.permissionMode;
   }
 
   mkdirSync(dirname(configPath), { recursive: true });

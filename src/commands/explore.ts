@@ -1,7 +1,7 @@
-import { MomoClient } from '../client.js';
 import { printJson, table, truncate } from '../format.js';
 import { flagNumber } from '../parser.js';
 import type { ParsedCommand } from '../parser.js';
+import { exploreAgents } from '../services.js';
 
 export async function exploreCommand(command: ParsedCommand) {
   const query = command.args.join(' ').trim();
@@ -9,21 +9,7 @@ export async function exploreCommand(command: ParsedCommand) {
     throw new Error('Usage: $explore <query> [--limit n] [--json]');
   }
 
-  const response = await new MomoClient().request<any>('/api/cli/agents/search', {
-    query: {
-      query,
-      limit: flagNumber(command.flags, 'limit') || 10
-    }
-  });
-
-  const agents = response.data?.agents || [];
-  const jsonRows = agents.map((agent: any) => ({
-    id: agent.id,
-    name: agent.name,
-    price: `${agent.price}/${agent.price_unit}`,
-    model: agent.model_call_name,
-    intro: agent.intro
-  }));
+  const jsonRows = await exploreAgents(query, flagNumber(command.flags, 'limit') || 10);
 
   if (command.flags.json) {
     printJson(jsonRows);

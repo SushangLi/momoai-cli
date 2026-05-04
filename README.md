@@ -81,6 +81,14 @@ Chat with the selected model:
 momoai> hello
 ```
 
+Chat requests can let the model use MOMOAI tools for `$explore` and `$exchange`. Set the tool permission mode:
+
+```text
+momoai> $permission
+momoai> $permission part
+momoai> $permission full
+```
+
 Outside the interactive CLI, text that does not start with a CLI command is also sent as chat:
 
 ```bash
@@ -155,7 +163,7 @@ momoai> $explore finance --json
 
 ### `$exchange balance [--json]`
 
-Shows account credits and owned token balances.
+Shows account credits and token balances for agents you have bought or used, including zero and negative balances.
 
 ```text
 momoai> $exchange balance
@@ -220,6 +228,23 @@ After setting a model, any interactive line that does not start with `$` is sent
 Outside the interactive CLI, `momoai hello` uses the same chat path. If the first word is a CLI command such as `exchange` or `config`, it runs that command instead.
 
 If an advertised default model has no tokens yet, the chat request may ask you to buy tokens first.
+
+### `$permission part|full`
+
+Controls which model tool calls can run automatically during chat.
+
+```text
+momoai> $permission
+momoai> $permission part
+momoai> $permission full
+```
+
+Modes:
+
+- `part`: explore, balance, owned, and listings tools run automatically. Buy and sell tools ask for confirmation.
+- `full`: all explore and exchange tools run automatically, including buy and sell.
+
+The model only receives tools backed by `$explore` and `$exchange`.
 
 ### `$run <agent_id> [--json]`
 
@@ -339,6 +364,14 @@ momoai> $model momo_237
 momoai> hello
 ```
 
+聊天请求会允许模型使用 MOMOAI tools，范围只包括 `$explore` 和 `$exchange`。设置工具权限模式：
+
+```text
+momoai> $permission
+momoai> $permission part
+momoai> $permission full
+```
+
 在普通终端里，如果输入内容不是 CLI 命令，也会作为聊天发送：
 
 ```bash
@@ -413,7 +446,7 @@ momoai> $explore finance --json
 
 ### `$exchange balance [--json]`
 
-查看账户积分和已拥有的 token 余额。
+查看账户积分，以及你购买或使用过的 Agent token 余额，包括 0 和负数余额。
 
 ```text
 momoai> $exchange balance
@@ -478,6 +511,23 @@ momoai> $model momo_237
 在普通终端里，`momoai hello` 也会走同样的聊天流程。如果第一个词是 `exchange` 或 `config` 等 CLI 命令，则会执行对应命令。
 
 如果推荐模型还没有 tokens，聊天请求可能会提示你先购买 tokens。
+
+### `$permission part|full`
+
+控制聊天时模型 tool calls 的自动执行权限。
+
+```text
+momoai> $permission
+momoai> $permission part
+momoai> $permission full
+```
+
+模式：
+
+- `part`：explore、balance、owned、listings 自动执行。buy 和 sell 会先请求用户确认。
+- `full`：所有 explore 和 exchange tools 都自动执行，包括 buy 和 sell。
+
+模型只能使用基于 `$explore` 和 `$exchange` 的 tools。
 
 ### `$run <agent_id> [--json]`
 
