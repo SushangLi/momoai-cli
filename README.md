@@ -16,20 +16,7 @@ git clone git@github.com:SushangLi/momoai-cli.git
 cd momoai-cli
 npm install
 npm run build
-npm start
-```
-
-`npm start` runs `node dist/index.js`, so run `npm run build` first.
-
-To install the `momoai` command globally from your local clone:
-
-```bash
 npm link
-```
-
-After `npm link`, start the interactive CLI from any directory:
-
-```bash
 momoai
 ```
 
@@ -42,12 +29,6 @@ momoai exchange buy 216 --tokens 200 --max-price 10
 ## Quick Start
 
 Start the CLI:
-
-```bash
-npm start
-```
-
-Or, after `npm link`:
 
 ```bash
 momoai
@@ -238,20 +219,7 @@ git clone git@github.com:SushangLi/momoai-cli.git
 cd momoai-cli
 npm install
 npm run build
-npm start
-```
-
-`npm start` 实际执行的是 `node dist/index.js`，所以需要先运行 `npm run build`。
-
-如果想把 `momoai` 命令安装到本机全局命令中：
-
-```bash
 npm link
-```
-
-执行 `npm link` 后，可以在任意目录启动交互式 CLI：
-
-```bash
 momoai
 ```
 
@@ -264,12 +232,6 @@ momoai exchange buy 216 --tokens 200 --max-price 10
 ## 快速开始
 
 启动 CLI：
-
-```bash
-npm start
-```
-
-或者，在执行过 `npm link` 后：
 
 ```bash
 momoai
