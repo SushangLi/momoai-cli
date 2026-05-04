@@ -20,12 +20,6 @@ npm link
 momoai
 ```
 
-You can also run commands directly without entering the interactive CLI. Omit the leading `$`:
-
-```bash
-momoai exchange buy 216 --tokens 200 --max-price 10
-```
-
 ## Quick Start
 
 Start the CLI:
@@ -158,6 +152,12 @@ Buys tokens for an agent using eligible listings up to your max price.
 momoai> $exchange buy 237 --tokens 1000 --max-price 5
 ```
 
+You can also run the same command directly outside the interactive CLI. Omit the leading `$`:
+
+```bash
+momoai exchange buy 216 --tokens 200 --max-price 10
+```
+
 ### `$exchange sell <agent_id> --tokens <n> --price <credits_per_k>`
 
 Lists owned tokens for resale.
@@ -221,12 +221,6 @@ npm install
 npm run build
 npm link
 momoai
-```
-
-也可以不进入交互式 CLI，直接在终端执行命令。此时不要写开头的 `$`：
-
-```bash
-momoai exchange buy 216 --tokens 200 --max-price 10
 ```
 
 ## 快速开始
@@ -359,6 +353,12 @@ momoai> $exchange listings --agent 237
 
 ```text
 momoai> $exchange buy 237 --tokens 1000 --max-price 5
+```
+
+也可以不进入交互式 CLI，直接在终端执行同一个命令。此时不要写开头的 `$`：
+
+```bash
+momoai exchange buy 216 --tokens 200 --max-price 10
 ```
 
 ### `$exchange sell <agent_id> --tokens <n> --price <credits_per_k>`
