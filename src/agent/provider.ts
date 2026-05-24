@@ -4,6 +4,7 @@ import { buildAgentCard, buildOasfRecord } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
+import type { ResolvedAgentConfig } from '../config.js';
 
 interface ProviderRegistration {
   provider_token: string;
@@ -48,9 +49,11 @@ function jsonRpcError(id: JsonRpcRequest['id'], code: number, message: string): 
   };
 }
 
-async function registerProvider(agentId: number): Promise<ProviderRegistration> {
-  const card = buildAgentCard({ mode: 'remote_service', agentId });
-  const oasf = buildOasfRecord({ mode: 'remote_service', agentId });
+async function registerProvider(agent: ResolvedAgentConfig): Promise<ProviderRegistration> {
+  const agentId = agent.agentId;
+  if (!agentId) throw new Error('Remote service provider requires an agent id.');
+  const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
+  const oasf = buildOasfRecord({ mode: 'remote_service', agentId, agent });
   const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
     body: {
       agent_id: agentId,
@@ -87,14 +90,14 @@ async function submitResult(registration: ProviderRegistration, runId: string, r
   });
 }
 
-async function executeRelayTask(task: RelayTask, agentId: number): Promise<JsonRpcResponse> {
+async function executeRelayTask(task: RelayTask, agent: ResolvedAgentConfig): Promise<JsonRpcResponse> {
   const request = task.request;
   if (request?.jsonrpc !== '2.0' || request.method !== 'message/send') {
     return jsonRpcError(request?.id, -32601, 'Remote service provider only supports message/send');
   }
 
   try {
-    const auth = await verifyInvocationAuth(`Bearer ${task.invocation_token}`, agentId);
+    const auth = await verifyInvocationAuth(`Bearer ${task.invocation_token}`, agent.agentId);
     const params = request.params || {};
     const content = textFromA2aMessage(params.message);
     if (!content) return jsonRpcError(request.id, -32602, 'message/send requires a text message');
@@ -111,7 +114,8 @@ async function executeRelayTask(task: RelayTask, agentId: number): Promise<JsonR
       capabilityId,
       contextId: String(params.metadata?.contextId || params.contextId || auth.runId || task.run_id),
       showPlan: params.metadata?.showPlan === true,
-      invocationToken: task.invocation_token
+      invocationToken: task.invocation_token,
+      agent
     });
 
     return jsonRpcResult(request.id, {
@@ -137,12 +141,14 @@ async function executeRelayTask(task: RelayTask, agentId: number): Promise<JsonR
   }
 }
 
-export async function runRemoteServiceProvider(agentId: number) {
+export async function runRemoteServiceProvider(agent: ResolvedAgentConfig) {
   const config = loadConfig();
-  const registration = await registerProvider(agentId);
+  if (!agent.agentId) throw new Error('Remote service provider requires an agent id.');
+  const registration = await registerProvider(agent);
   const intervalMs = Number(registration.poll_interval_ms || 1500);
   console.log(`MOMOAI remote service provider connected to ${config.apiUrl}`);
-  console.log(`agent: ${agentId}`);
+  console.log(`profile: ${agent.profile}`);
+  console.log(`agent: ${agent.agentId}`);
   console.log(`node: ${registration.node_id}`);
 
   for (;;) {
@@ -152,7 +158,7 @@ export async function runRemoteServiceProvider(agentId: number) {
       continue;
     }
 
-    const response = await executeRelayTask(task, agentId);
+    const response = await executeRelayTask(task, agent);
     await submitResult(registration, task.run_id, response);
   }
 }

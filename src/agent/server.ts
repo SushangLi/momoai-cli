@@ -5,7 +5,7 @@ import type { InvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import { makeId } from './token.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
-import { loadConfig, type AgentMode } from '../config.js';
+import { loadConfig, resolveAgentConfig, type AgentMode, type ResolvedAgentConfig } from '../config.js';
 
 type TaskState = 'submitted' | 'working' | 'completed' | 'canceled' | 'failed';
 
@@ -66,7 +66,7 @@ function capabilityIdFromParams(params: any) {
   return String(params?.metadata?.capability_id || params?.metadata?.capabilityId || params?.capability_id || params?.capabilityId || '').trim();
 }
 
-async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, auth?: InvocationAuth) {
+async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent: ResolvedAgentConfig, auth?: InvocationAuth) {
   const params = request.params || {};
   const content = textFromA2aMessage(params.message);
   if (!content) {
@@ -75,7 +75,7 @@ async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, auth?
 
   const capabilityId = capabilityIdFromParams(params);
   const knownCapabilityIds = new Set(
-    loadConfig().agent.capabilities
+    agent.capabilities
       .filter((capability) => capability.enabled !== false)
       .map((capability) => capability.id)
   );
@@ -106,7 +106,8 @@ async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, auth?
       capabilityId: capabilityId || undefined,
       contextId,
       showPlan: params.metadata?.showPlan === true,
-      invocationToken: auth?.token
+      invocationToken: auth?.token,
+      agent
     });
     task.state = 'completed';
     task.result = {
@@ -149,16 +150,18 @@ export async function startAgentServer(options: {
   host: string;
   port: number;
   mode: AgentMode;
+  agent?: ResolvedAgentConfig;
 }) {
+  const agent = options.agent || resolveAgentConfig(loadConfig());
   const app = express();
   app.use(express.json({ limit: '2mb' }));
 
   app.get('/.well-known/agent-card.json', (_request, response) => {
-    response.json(buildAgentCard({ mode: options.mode }));
+    response.json(buildAgentCard({ mode: options.mode, agent }));
   });
 
   app.get('/.well-known/oasf-record.json', (_request, response) => {
-    response.json(buildOasfRecord({ mode: options.mode }));
+    response.json(buildOasfRecord({ mode: options.mode, agent }));
   });
 
   app.post('/a2a', async (expressRequest, response) => {
@@ -170,10 +173,10 @@ export async function startAgentServer(options: {
 
     try {
       const auth = options.mode === 'remote_service'
-        ? await verifyInvocationAuth(expressRequest.headers.authorization)
+        ? await verifyInvocationAuth(expressRequest.headers.authorization, agent.agentId)
         : undefined;
       if (request.method === 'message/send') {
-        response.json(await handleMessageSend(request, options.mode, auth));
+        response.json(await handleMessageSend(request, options.mode, agent, auth));
         return;
       }
       if (request.method === 'tasks/get') {

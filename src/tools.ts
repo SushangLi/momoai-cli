@@ -1,5 +1,6 @@
-import { loadConfig } from './config.js';
-import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents } from './services.js';
+import { loadConfig, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
+import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
+import type { AgentCapability, ResolvedAgentConfig } from './config.js';
 
 export type ConfirmTool = (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 
@@ -94,6 +95,72 @@ export const momoTools = [
         required: ['agent_id', 'content']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'publish_local_agent_listing',
+      description: 'Create a delisted MOMOAI A2A remote-service listing for one local CLI agent profile.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string', description: 'Local agent profile name. Use default if omitted.' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          price: { type: 'number', description: 'Credits per 1K agent tokens.' },
+          available_tokens: { type: 'number' },
+          capabilities: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                fixedTokens: { type: 'number' },
+                enabled: { type: 'boolean' }
+              },
+              required: ['id', 'name', 'fixedTokens']
+            }
+          }
+        },
+        required: ['name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_local_agent_listing',
+      description: 'Update an existing MOMOAI A2A remote-service listing for one local CLI agent profile.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string' },
+          agent_id: { type: 'number' },
+          public: { type: 'boolean', description: 'Set true to publish publicly after a provider node is online.' },
+          delisted: { type: 'boolean', description: 'Set true to keep the listing hidden.' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          price: { type: 'number' },
+          available_tokens: { type: 'number' },
+          capabilities: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                fixedTokens: { type: 'number' },
+                enabled: { type: 'boolean' }
+              },
+              required: ['id', 'name', 'fixedTokens']
+            }
+          }
+        }
+      }
+    }
   }
 ];
 
@@ -119,10 +186,64 @@ function intArg(args: Record<string, unknown>, name: string) {
 }
 
 async function confirmIfNeeded(name: string, args: Record<string, unknown>, confirm?: ConfirmTool) {
-  const isTrade = name === 'exchange_buy' || name === 'exchange_sell';
+  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing';
   if (!isTrade || loadConfig().permissionMode === 'full') return true;
   if (!confirm) return false;
   return confirm(name, args);
+}
+
+function capabilitiesArg(value: unknown): AgentCapability[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error('capabilities must be an array');
+  const capabilities = value.map((capability: any) => ({
+    id: String(capability.id || capability.capability_id || capability.capabilityId || '').trim(),
+    name: String(capability.name || capability.id || capability.capability_id || capability.capabilityId || '').trim(),
+    description: String(capability.description || '').trim(),
+    fixedTokens: Number(capability.fixedTokens ?? capability.fixed_tokens),
+    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled)
+  })).filter((capability) => capability.id && capability.name);
+  if (!capabilities.length) throw new Error('capabilities must include at least one item');
+  return capabilities;
+}
+
+function agentForTool(args: Record<string, unknown>): ResolvedAgentConfig {
+  const config = loadConfig();
+  const profile = normalizeProfileName(args.profile) || 'default';
+  let agent: ResolvedAgentConfig;
+  try {
+    agent = resolveAgentConfig(config, profile);
+  } catch {
+    agent = { ...resolveAgentConfig(config), profile };
+  }
+
+  const caps = capabilitiesArg(args.capabilities);
+  return {
+    ...agent,
+    mode: 'remote_service',
+    ...(args.name ? { name: String(args.name) } : {}),
+    ...(args.description ? { description: String(args.description) } : {}),
+    ...(args.agent_id ? { agentId: intArg(args, 'agent_id') } : {}),
+    ...(caps ? { capabilities: caps } : {}),
+    listing: {
+      ...agent.listing,
+      ...(args.price === undefined ? {} : { price: numberArg(args, 'price') }),
+      ...(args.available_tokens === undefined ? {} : { availableTokens: numberArg(args, 'available_tokens') })
+    }
+  };
+}
+
+function saveToolAgent(agent: ResolvedAgentConfig) {
+  saveAgentProfile(agent.profile, {
+    mode: 'remote_service',
+    name: agent.name,
+    description: agent.description,
+    version: agent.version,
+    host: agent.host,
+    port: agent.port,
+    agentId: agent.agentId,
+    capabilities: agent.capabilities,
+    listing: agent.listing
+  });
 }
 
 export async function executeToolCall(
@@ -164,6 +285,34 @@ export async function executeToolCall(
     }
     if (name === 'call_platform_agent') {
       return await callPlatformAgent(intArg(args, 'agent_id'), String(args.content || ''), options.authToken);
+    }
+    if (name === 'publish_local_agent_listing') {
+      const agent = agentForTool(args);
+      const listing = await publishLocalAgentListing(agent, {
+        name: agent.name,
+        description: agent.description,
+        price: agent.listing.price,
+        availableTokens: agent.listing.availableTokens
+      }, options.authToken);
+      agent.agentId = Number((listing as any).agent_id || (listing as any).agentId);
+      saveToolAgent(agent);
+      return listing;
+    }
+    if (name === 'update_local_agent_listing') {
+      const agent = agentForTool(args);
+      const isDelisted = args.public === true ? false : args.delisted === true ? true : undefined;
+      const listing = await updateLocalAgentListing(agent, {
+        agentId: agent.agentId,
+        name: agent.name,
+        description: agent.description,
+        price: agent.listing.price,
+        availableTokens: agent.listing.availableTokens,
+        ...(isDelisted === undefined ? {} : { isDelisted })
+      }, options.authToken);
+      agent.agentId = Number((listing as any).agent_id || (listing as any).agentId || agent.agentId);
+      if (isDelisted !== undefined) agent.listing.isDelisted = isDelisted;
+      saveToolAgent(agent);
+      return listing;
     }
     return { error: `Unknown tool: ${name}` };
   } catch (error) {

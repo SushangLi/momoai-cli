@@ -98,7 +98,8 @@ export class AgentRuntime {
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     const config = loadConfig();
-    const mode = input.mode || config.agent.mode;
+    const agent = input.agent || config.agent;
+    const mode = input.mode || agent.mode;
     const contextId = input.contextId || 'default';
     const snapshot = this.memory.load(contextId);
     const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -110,7 +111,7 @@ export class AgentRuntime {
     const systemMessage = {
       role: 'system',
       content: [
-        config.agent.description,
+        agent.description,
         '',
         'Operating rules:',
         '- Follow the approved plan before acting.',

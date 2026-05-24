@@ -1,4 +1,4 @@
-import type { AgentMode } from '../config.js';
+import type { AgentMode, ResolvedAgentConfig } from '../config.js';
 
 export interface AgentRunInput {
   content: string;
@@ -7,6 +7,7 @@ export interface AgentRunInput {
   contextId?: string;
   showPlan?: boolean;
   invocationToken?: string;
+  agent?: ResolvedAgentConfig;
 }
 
 export interface AgentRunResult {

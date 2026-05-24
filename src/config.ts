@@ -12,21 +12,44 @@ export interface AgentCapability {
   enabled?: boolean;
 }
 
+export interface AgentListingConfig {
+  price?: number;
+  availableTokens?: number;
+  isDelisted?: boolean;
+}
+
+export interface AgentInstanceConfig {
+  mode?: AgentMode;
+  name?: string;
+  description?: string;
+  version?: string;
+  host?: string;
+  port?: number;
+  agentId?: number;
+  capabilities?: AgentCapability[];
+  listing?: AgentListingConfig;
+}
+
+export interface ResolvedAgentConfig {
+  profile: string;
+  mode: AgentMode;
+  name: string;
+  description: string;
+  version: string;
+  host: string;
+  port: number;
+  agentId?: number;
+  capabilities: AgentCapability[];
+  listing: Required<AgentListingConfig>;
+}
+
 export interface CliConfig {
   apiUrl: string;
   model: string;
   defaultModels: string[];
   permissionMode: 'part' | 'full';
-  agent: {
-    mode: AgentMode;
-    name: string;
-    description: string;
-    version: string;
-    host: string;
-    port: number;
-    agentId?: number;
-    capabilities: AgentCapability[];
-  };
+  agent: Omit<ResolvedAgentConfig, 'profile' | 'listing'> & { listing?: AgentListingConfig };
+  agentProfiles?: Record<string, AgentInstanceConfig>;
   memory: {
     path?: string;
     contextTokenLimit: number;
@@ -65,6 +88,12 @@ const defaultCapabilities: AgentCapability[] = [
   }
 ];
 
+const defaultListing: Required<AgentListingConfig> = {
+  price: 10,
+  availableTokens: 1_000_000,
+  isDelisted: true
+};
+
 const defaultConfig: CliConfig = {
   apiUrl: 'https://momoai.pro',
   model: 'momo_237',
@@ -77,7 +106,8 @@ const defaultConfig: CliConfig = {
     version: '0.1.0',
     host: '127.0.0.1',
     port: 41241,
-    capabilities: defaultCapabilities
+    capabilities: defaultCapabilities,
+    listing: defaultListing
   },
   memory: {
     contextTokenLimit: 200_000,
@@ -148,6 +178,68 @@ function normalizeCapabilities(value: unknown): AgentCapability[] {
   return normalized.length ? normalized : defaultCapabilities;
 }
 
+function normalizeListing(value: unknown): Required<AgentListingConfig> {
+  const listing = value && typeof value === 'object' ? value as AgentListingConfig : {};
+  const price = Number(listing.price ?? defaultListing.price);
+  const availableTokens = Number(listing.availableTokens ?? defaultListing.availableTokens);
+  return {
+    price: Number.isFinite(price) && price >= 0 ? price : defaultListing.price,
+    availableTokens: Number.isFinite(availableTokens) && availableTokens >= 0 ? Math.floor(availableTokens) : defaultListing.availableTokens,
+    isDelisted: listing.isDelisted === undefined ? defaultListing.isDelisted : Boolean(listing.isDelisted)
+  };
+}
+
+function normalizeAgentInstance(value: unknown): AgentInstanceConfig {
+  const agent = value && typeof value === 'object' ? value as AgentInstanceConfig : {};
+  return {
+    ...(agent.mode === undefined ? {} : { mode: normalizeAgentMode(agent.mode) }),
+    ...(typeof agent.name === 'string' && agent.name.trim() ? { name: agent.name.trim() } : {}),
+    ...(typeof agent.description === 'string' && agent.description.trim() ? { description: normalizeAgentDescription(agent.description) || agent.description.trim() } : {}),
+    ...(typeof agent.version === 'string' && agent.version.trim() ? { version: agent.version.trim() } : {}),
+    ...(typeof agent.host === 'string' && agent.host.trim() ? { host: agent.host.trim() } : {}),
+    ...(agent.port === undefined ? {} : { port: Number(agent.port) }),
+    ...(agent.agentId === undefined ? {} : { agentId: Number(agent.agentId) }),
+    ...(agent.capabilities === undefined ? {} : { capabilities: normalizeCapabilities(agent.capabilities) }),
+    ...(agent.listing === undefined ? {} : { listing: normalizeListing(agent.listing) })
+  };
+}
+
+function normalizeAgentProfiles(value: unknown): Record<string, AgentInstanceConfig> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const profiles: Record<string, AgentInstanceConfig> = {};
+  for (const [rawName, rawProfile] of Object.entries(value as Record<string, unknown>)) {
+    const name = normalizeProfileName(rawName);
+    if (!name || name === 'default') continue;
+    profiles[name] = normalizeAgentInstance(rawProfile);
+  }
+  return Object.keys(profiles).length ? profiles : undefined;
+}
+
+export function normalizeProfileName(value: unknown) {
+  const name = String(value || '').trim();
+  if (!name) return undefined;
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(name)) {
+    throw new Error('Agent profile must be 1-64 characters: letters, numbers, underscore, dot, or dash.');
+  }
+  return name;
+}
+
+function buildBaseAgent(storedAgent: Partial<CliConfig['agent']> | undefined): CliConfig['agent'] {
+  return {
+    ...defaultConfig.agent,
+    ...(storedAgent || {}),
+    mode: normalizeAgentMode(process.env.MOMOAI_AGENT_MODE || storedAgent?.mode || defaultConfig.agent.mode),
+    description: normalizeAgentDescription(storedAgent?.description) || defaultConfig.agent.description,
+    host: process.env.MOMOAI_AGENT_HOST || storedAgent?.host || defaultConfig.agent.host,
+    port: Number(process.env.MOMOAI_AGENT_PORT || storedAgent?.port || defaultConfig.agent.port),
+    agentId: process.env.MOMOAI_AGENT_ID
+      ? Number(process.env.MOMOAI_AGENT_ID)
+      : storedAgent?.agentId,
+    capabilities: normalizeCapabilities(parseCapabilities(process.env.MOMOAI_AGENT_CAPABILITIES) || storedAgent?.capabilities || defaultConfig.agent.capabilities),
+    listing: normalizeListing(storedAgent?.listing)
+  };
+}
+
 export function loadConfig(): CliConfig {
   const stored = readStoredConfig() as LegacyConfig;
   const envMomoKey = process.env.MOMOAI_KEY;
@@ -162,23 +254,15 @@ export function loadConfig(): CliConfig {
       }
     : undefined);
 
+  const agent = buildBaseAgent(stored.agent);
+
   return {
     apiUrl: (process.env.MOMOAI_API_URL || stored.apiUrl || defaultConfig.apiUrl).replace(/\/$/, ''),
     model: stored.model || defaultConfig.model,
     defaultModels: stored.defaultModels?.length ? stored.defaultModels : defaultConfig.defaultModels,
     permissionMode: stored.permissionMode === 'full' ? 'full' : defaultConfig.permissionMode,
-    agent: {
-      ...defaultConfig.agent,
-      ...(stored.agent || {}),
-      mode: normalizeAgentMode(process.env.MOMOAI_AGENT_MODE || stored.agent?.mode || defaultConfig.agent.mode),
-      description: normalizeAgentDescription(stored.agent?.description) || defaultConfig.agent.description,
-      host: process.env.MOMOAI_AGENT_HOST || stored.agent?.host || defaultConfig.agent.host,
-      port: Number(process.env.MOMOAI_AGENT_PORT || stored.agent?.port || defaultConfig.agent.port),
-      agentId: process.env.MOMOAI_AGENT_ID
-        ? Number(process.env.MOMOAI_AGENT_ID)
-        : stored.agent?.agentId,
-      capabilities: normalizeCapabilities(parseCapabilities(process.env.MOMOAI_AGENT_CAPABILITIES) || stored.agent?.capabilities || defaultConfig.agent.capabilities)
-    },
+    agent,
+    agentProfiles: normalizeAgentProfiles(stored.agentProfiles),
     memory: {
       ...defaultConfig.memory,
       ...(stored.memory || {}),
@@ -215,8 +299,10 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
     ...defaultConfig.agent,
     ...(merged.agent || {}),
     mode: normalizeAgentMode(merged.agent?.mode),
-    capabilities: normalizeCapabilities(merged.agent?.capabilities)
+    capabilities: normalizeCapabilities(merged.agent?.capabilities),
+    listing: normalizeListing(merged.agent?.listing)
   };
+  merged.agentProfiles = normalizeAgentProfiles(merged.agentProfiles);
   merged.memory = {
     ...defaultConfig.memory,
     ...(merged.memory || {})
@@ -229,4 +315,69 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
 
 export function getConfigPath() {
   return configPath;
+}
+
+export function resolveAgentConfig(config: CliConfig, profileName?: string): ResolvedAgentConfig {
+  const envProfile = process.env.MOMOAI_AGENT_PROFILE;
+  const normalizedProfile = normalizeProfileName(profileName || envProfile || 'default') || 'default';
+  const base = config.agent;
+  if (normalizedProfile === 'default') {
+    return {
+      profile: 'default',
+      ...base,
+      listing: normalizeListing(base.listing)
+    };
+  }
+
+  const profile = config.agentProfiles?.[normalizedProfile];
+  if (!profile) {
+    throw new Error(`Agent profile '${normalizedProfile}' is not configured. Publish it or set it first.`);
+  }
+
+  return {
+    profile: normalizedProfile,
+    mode: normalizeAgentMode(profile.mode || base.mode),
+    name: profile.name || base.name,
+    description: normalizeAgentDescription(profile.description) || base.description,
+    version: profile.version || base.version,
+    host: profile.host || base.host,
+    port: Number(profile.port || base.port),
+    agentId: profile.agentId || base.agentId,
+    capabilities: normalizeCapabilities(profile.capabilities || base.capabilities),
+    listing: normalizeListing(profile.listing || base.listing)
+  };
+}
+
+export function saveAgentProfile(profileName: string | undefined, updates: AgentInstanceConfig): CliConfig {
+  const normalizedProfile = normalizeProfileName(profileName || 'default') || 'default';
+  const current = readStoredConfig() as LegacyConfig;
+
+  if (normalizedProfile === 'default') {
+    return saveConfig({
+      agent: {
+        ...(current.agent || {}),
+        ...updates,
+        capabilities: updates.capabilities || current.agent?.capabilities,
+        listing: {
+          ...(current.agent?.listing || {}),
+          ...(updates.listing || {})
+        }
+      } as CliConfig['agent']
+    });
+  }
+
+  const profiles = {
+    ...(current.agentProfiles || {})
+  };
+  profiles[normalizedProfile] = {
+    ...(profiles[normalizedProfile] || {}),
+    ...updates,
+    capabilities: updates.capabilities || profiles[normalizedProfile]?.capabilities,
+    listing: {
+      ...(profiles[normalizedProfile]?.listing || {}),
+      ...(updates.listing || {})
+    }
+  };
+
+  return saveConfig({ agentProfiles: profiles });
 }

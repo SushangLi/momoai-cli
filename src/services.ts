@@ -1,4 +1,5 @@
 import { MomoClient } from './client.js';
+import type { ResolvedAgentConfig } from './config.js';
 
 export async function exploreAgents(query: string, limit = 10, authToken?: string) {
   const response = await new MomoClient().request<any>('/api/cli/agents/search', {
@@ -95,4 +96,68 @@ export async function callPlatformAgent(agentId: number, content: string, authTo
     content: response.choices?.[0]?.message?.content ?? '',
     usage: response.usage
   };
+}
+
+function listingPayload(agent: ResolvedAgentConfig, overrides: {
+  name?: string;
+  description?: string;
+  price?: number;
+  availableTokens?: number;
+  isDelisted?: boolean;
+} = {}) {
+  return {
+    agent_name: overrides.name || agent.name,
+    agent_intro: overrides.description || agent.description || agent.name,
+    agent_price: overrides.price ?? agent.listing.price,
+    agent_available_tokens: overrides.availableTokens ?? agent.listing.availableTokens,
+    is_delisted: overrides.isDelisted ?? agent.listing.isDelisted,
+    baseurl_type: 'a2a',
+    agent_source_type: 'api',
+    agent_source: agent.agentId ? `https://momoai.pro/a2a/agents/${agent.agentId}` : 'https://momoai.pro/a2a/agents/pending',
+    agentCallName: agent.agentId ? `momo_${agent.agentId}` : `momo_${agent.name.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 48) || 'agent'}`,
+    a2a_capabilities: agent.capabilities
+      .filter((capability) => capability.enabled !== false)
+      .map((capability, index) => ({
+        id: capability.id,
+        name: capability.name,
+        description: capability.description || '',
+        fixedTokens: Number(capability.fixedTokens || 0),
+        enabled: capability.enabled !== false,
+        sortOrder: index
+      }))
+  };
+}
+
+export async function publishLocalAgentListing(agent: ResolvedAgentConfig, overrides: {
+  name?: string;
+  description?: string;
+  price?: number;
+  availableTokens?: number;
+} = {}, authToken?: string) {
+  const response = await new MomoClient().request<any>('/api/cli/agents/listing', {
+    authToken,
+    body: listingPayload(agent, { ...overrides, isDelisted: true })
+  });
+  return response.data || response;
+}
+
+export async function updateLocalAgentListing(agent: ResolvedAgentConfig, overrides: {
+  agentId?: number;
+  name?: string;
+  description?: string;
+  price?: number;
+  availableTokens?: number;
+  isDelisted?: boolean;
+} = {}, authToken?: string) {
+  const agentId = overrides.agentId || agent.agentId;
+  if (!agentId) throw new Error('update-listing requires --agent-id or a profile with agentId.');
+  const response = await new MomoClient().request<any>('/api/cli/agents/listing', {
+    authToken,
+    method: 'PUT',
+    body: {
+      agent_id: agentId,
+      ...listingPayload({ ...agent, agentId }, overrides)
+    }
+  });
+  return response.data || response;
 }

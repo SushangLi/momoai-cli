@@ -52,6 +52,8 @@ export async function configCommand(command: ParsedCommand) {
     console.log(`agent.port: ${config.agent.port}`);
     console.log(`agent.agentId: ${config.agent.agentId || '(not set)'}`);
     console.log(`agent.capabilities: ${config.agent.capabilities.map((capability) => `${capability.id}${capability.fixedTokens ? `:${capability.fixedTokens}` : ''}`).join(', ')}`);
+    const profileNames = Object.keys(config.agentProfiles || {});
+    console.log(`agentProfiles: ${profileNames.length ? profileNames.join(', ') : '(none)'}`);
     console.log(`memory.path: ${config.memory.path || '~/.momoai-cli/memory'}`);
     console.log(`memory.contextTokenLimit: ${config.memory.contextTokenLimit}`);
     console.log(`memory.recentTokenBudget: ${config.memory.recentTokenBudget}`);

@@ -32,7 +32,7 @@ function help() {
   $model [model]
   $permission part|full
   $run <agent_id> [--json]
-  $agent serve|card|oasf|call ...
+  $agent profile|publish|update-listing|serve|connect|card|oasf|call ...
   $config show
   $config reset key
   $quit
@@ -81,7 +81,10 @@ async function runLine(line: string, confirmTool?: ConfirmTool) {
 }
 
 async function main() {
-  const direct = process.argv.slice(2).join(' ');
+  const direct = process.argv.slice(2).map((arg) => {
+    if (!/[\s"'\\]/.test(arg)) return arg;
+    return `"${arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  }).join(' ');
   if (direct) {
     const firstToken = direct.trim().split(/\s+/)[0].replace(/^\$/, '');
     if (direct.trim().startsWith('$') || cliCommands.has(firstToken)) {

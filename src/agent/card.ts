@@ -1,21 +1,22 @@
 import { loadConfig } from '../config.js';
-import type { AgentCapability, AgentMode } from '../config.js';
+import type { AgentCapability, AgentMode, ResolvedAgentConfig } from '../config.js';
 
 interface AgentCardOptions {
   mode?: AgentMode;
   agentId?: number;
   localBaseUrl?: string;
+  agent?: ResolvedAgentConfig;
 }
 
-function localA2aUrl(localBaseUrl?: string) {
+function localA2aUrl(localBaseUrl: string | undefined, agent?: ResolvedAgentConfig) {
   if (localBaseUrl) return `${localBaseUrl.replace(/\/$/, '')}/a2a`;
-  const config = loadConfig();
-  return `http://${config.agent.host}:${config.agent.port}/a2a`;
+  const current = agent || loadConfig().agent;
+  return `http://${current.host}:${current.port}/a2a`;
 }
 
-function remoteServiceUrl(agentId?: number) {
+function remoteServiceUrl(agentId?: number, agent?: ResolvedAgentConfig) {
   const config = loadConfig();
-  const id = agentId || config.agent.agentId;
+  const id = agentId || agent?.agentId || config.agent.agentId;
   if (!id) {
     throw new Error('remote_service agent card requires --agent-id or MOMOAI_AGENT_ID.');
   }
@@ -44,15 +45,16 @@ function renderCapabilities(capabilities: AgentCapability[], mode: AgentMode) {
 
 export function buildAgentCard(options: AgentCardOptions = {}) {
   const config = loadConfig();
-  const mode = options.mode || config.agent.mode;
+  const agent = options.agent || config.agent;
+  const mode = options.mode || agent.mode;
   const url = mode === 'remote_service'
-    ? remoteServiceUrl(options.agentId)
-    : localA2aUrl(options.localBaseUrl);
-  const skills = renderCapabilities(config.agent.capabilities, mode);
+    ? remoteServiceUrl(options.agentId, options.agent)
+    : localA2aUrl(options.localBaseUrl, options.agent);
+  const skills = renderCapabilities(agent.capabilities, mode);
   return {
-    name: config.agent.name,
-    description: config.agent.description,
-    version: config.agent.version,
+    name: agent.name,
+    description: agent.description,
+    version: agent.version,
     url,
     mode,
     preferredTransport: 'JSONRPC',

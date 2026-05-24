@@ -36,13 +36,16 @@ const rules: Record<string, Rule> = {
     flags: ['--json']
   },
   agent: {
-    subcommands: ['serve', 'connect', 'card', 'oasf', 'call'],
-    flags: ['--mode', '--host', '--port', '--agent-id', '--auth', '--capability', '--context', '--show-plan', '--json'],
+    subcommands: ['profile', 'publish', 'update-listing', 'serve', 'connect', 'card', 'oasf', 'call'],
+    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--context', '--show-plan', '--json'],
     subcommandFlags: {
-      serve: ['--mode', '--host', '--port', '--agent-id'],
-      connect: ['--agent-id'],
-      card: ['--mode', '--agent-id', '--json'],
-      oasf: ['--mode', '--agent-id', '--json'],
+      profile: ['--name', '--description', '--host', '--port', '--agent-id', '--price', '--available-tokens', '--capabilities', '--capabilities-file'],
+      publish: ['--profile', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
+      'update-listing': ['--profile', '--agent-id', '--public', '--delisted', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
+      serve: ['--profile', '--mode', '--host', '--port', '--agent-id'],
+      connect: ['--profile', '--agent-id'],
+      card: ['--profile', '--mode', '--agent-id', '--json'],
+      oasf: ['--profile', '--mode', '--agent-id', '--json'],
       call: ['--auth', '--capability', '--context', '--show-plan', '--json']
     }
   },
