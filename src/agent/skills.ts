@@ -47,9 +47,9 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 1. Plan before acting. Identify the target profile, public name, capabilities, fixed result-token prices, and whether the service should stay delisted.
 2. Create or update a local profile with a clear name, description, capability list, and fixedTokens for every enabled capability.
 3. Publish with publish_local_agent_listing. This creates a delisted draft and stores the returned agent id in the profile.
-4. Use service_type http by default. HTTP is realtime and requires a reachable provider_url ending in /a2a. Choose polling only when the user explicitly wants delayed service without an inbound port; polling checks the platform about once per hour.
-5. For an already-running A2A service, use provider_runtime external and register its provider_url directly. The platform calls that endpoint; the CLI must not proxy it.
-6. Ask the user to run the provider with "$agent connect --profile <profile> --service <polling|http>" and keep that process online only when provider_runtime is cli.
+4. Use service_type websocket by default. WebSocket is realtime and opens an outbound relay connection to MOMOAI, so no public inbound port is required.
+5. For a pure already-running public A2A endpoint, use provider_runtime external with service_type funnel and register its provider_url directly. For OpenClaw or another external agent with a MOMOAI adapter plugin, service_type websocket is allowed because the external agent owns the outbound relay connection itself. The CLI must not proxy it.
+6. Ask the user to run the provider with "$agent connect --profile <profile> --service <websocket|funnel>" and keep that process online only when provider_runtime is cli. For OpenClaw, use "$agent openclaw install-a2a --service websocket" so the OpenClaw adapter stores relay credentials and connects directly.
 7. Only publish publicly after the provider is online, using update_local_agent_listing with public=true.
 8. Explain that failed or non-completed tasks are not charged; completed tasks charge the fixed token amount for the selected capability.
 
@@ -60,8 +60,8 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 - Each enabled capability must have positive fixedTokens.
 - Keep pricing in MOMOAI listing/provider registration or a MOMOAI market adapter record, not in generic A2A communication requirements.
 - One machine can host multiple profiles. Each running provider process is tied to one profile and one platform agent id.
-- Polling providers route by agent id and do not require public inbound ports.
-- CLI HTTP providers require distinct local host/port values and distinct provider_url values when multiple local services run at once.
+- WebSocket providers route by agent id and do not require public inbound ports.
+- CLI Funnel providers require distinct local host/port values and distinct provider_url values when multiple local services run at once.
 - External providers own their own protocol and port; use the CLI only to register, publish, and update them.`;
 
 const fallbackOpenClawA2aPublishingSkill = `# OpenClaw A2A Publishing Skill
@@ -77,13 +77,13 @@ Do not modify OpenClaw's official source code and do not use momoai-cli as the r
 
 ## Workflow
 
-1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, public provider URL, standard A2A plugin source, and priced MOMOAI capabilities.
+1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, service type, standard A2A plugin source, and priced MOMOAI capabilities. Use websocket by default; require a public provider URL only for funnel.
 2. Probe the local port, usually http://127.0.0.1:18789, for /.well-known/agent-card.json and the A2A JSON-RPC endpoint.
-3. If standard A2A is missing, use prepare_openclaw_a2a_market_service or "$agent openclaw install-a2a" to install the public standard A2A plugin source. If the user already manages that plugin, set skip_standard_plugin.
-4. Install/configure the MOMOAI adapter plugin. It must use a protected_path that differs from the standard upstream_path.
+3. If standard A2A is missing, use prepare_openclaw_a2a_market_service or "$agent openclaw install-a2a" to install the bundled spec-compatible standard A2A plugin. If the user already manages an official or custom A2A plugin, pass standard_plugin_source or set skip_standard_plugin.
+4. Install/configure the MOMOAI adapter plugin. It must use a protected_path that differs from the standard upstream_path. A MOMOAI agent_id is not required for local standard A2A communication. For websocket market publishing, the CLI registers the provider node and writes relayUrl/providerToken into OpenClaw config only after an agent_id exists; OpenClaw then connects directly to MOMOAI.
 5. Restart OpenClaw Gateway after plugin changes, or run with --restart.
-6. Publish/update the MOMOAI listing with provider_runtime external and provider_url set to the public MOMOAI protected provider endpoint, not the raw local CLI.
-7. Only make the listing public after the standard A2A endpoint and protected provider endpoint are reachable from momoai.pro.
+6. Publish/update the MOMOAI listing with provider_runtime external. For websocket, no inbound provider_url is required. For funnel, provider_url must be the public MOMOAI protected provider endpoint, not the raw local CLI.
+7. Only make the listing public after the standard A2A endpoint works locally and the MOMOAI provider node is online.
 
 ## Notes
 

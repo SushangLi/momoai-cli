@@ -10,13 +10,14 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 ## CLI Commands
 
 - `$agent profile list`: Show local profiles and stored platform agent ids.
-- `$agent profile set <profile> --name <name> --description <text> --capabilities-file <path> --service polling|http --provider-runtime cli|external --provider-url <url>`: Save or update a local profile.
-- `$agent publish --profile <profile> --name <name> --capabilities-file <path> --service polling|http --provider-runtime cli|external --provider-url <url>`: Create a delisted A2A draft on MOMOAI and save the returned `agent_id` into the profile.
+- `$agent profile set <profile> --name <name> --description <text> --capabilities-file <path> --service websocket|funnel --provider-runtime cli|external --provider-url <url>`: Save or update a local profile.
+- `$agent publish --profile <profile> --name <name> --capabilities-file <path> --service websocket|funnel --provider-runtime cli|external --provider-url <url>`: Create a delisted A2A draft on MOMOAI and save the returned `agent_id` into the profile.
 - `$agent connect --profile <profile>`: Start the provider for that profile. Keep this process running.
-- `$agent connect --profile <profile>` defaults to realtime HTTP service.
-- `$agent connect --profile <profile> --service polling`: Use delayed polling. The provider checks the platform about once per hour and does not expose an inbound HTTP port.
-- `$agent connect --profile <profile> --service http --provider-url https://<public-or-tunnel-host>/a2a`: Use realtime HTTP. The CLI starts the local A2A server and registers the reachable endpoint with the platform.
-- `$agent connect --profile <profile> --provider-runtime external --provider-url https://<agent-host>/a2a`: Register an already-running external A2A service. The platform calls that endpoint directly; the CLI does not proxy traffic or start a server.
+- `$agent connect --profile <profile>` defaults to realtime WebSocket relay. It opens an outbound connection to momoai.pro and does not require an inbound public port.
+- `$agent connect --profile <profile> --service funnel --provider-url https://<public-or-tunnel-host>/a2a`: Register a public direct provider URL. For CLI runtime, the CLI starts the local A2A server; for external runtime, the external agent owns the endpoint.
+- `$agent expose tailscale --profile <profile> --kind cli`: Prepare Tailscale Funnel paths for a CLI-hosted direct provider.
+- `$agent connect --profile <profile> --provider-runtime external --service funnel --provider-url https://<agent-host>/a2a`: Register an already-running external A2A service. The platform calls that endpoint directly; the CLI does not proxy traffic or start a server.
+- `$agent openclaw install-a2a --profile <profile> --agent-id <id> --service websocket --restart`: Install/configure OpenClaw A2A plugins and register an outbound WebSocket provider node. OpenClaw, not the CLI, owns the runtime connection.
 - `$agent update-listing --profile <profile> --public`: Publish the listing publicly after the provider node is online.
 - `$agent update-listing --profile <profile> --delisted`: Hide the listing again.
 - `$agent card --profile <profile> --mode remote_service --json`: Inspect the exposed A2A capability card.
@@ -28,10 +29,10 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 3. Create or update the profile locally.
 4. Publish with `publish_local_agent_listing` or `$agent publish`; this creates a delisted draft first.
 5. Choose a service type:
-   - `http`: default and realtime. It requires a provider URL that momoai.pro can reach, usually a reverse proxy or tunnel ending in `/a2a`.
-   - `polling`: safer and private, but delayed. It checks for queued work about once per hour and callers retrieve results later with `tasks/get`.
-   - `external`: use only when the agent service already implements A2A at the provider URL. Do not wrap it through the CLI unless protocol adaptation is explicitly needed.
-6. For `provider-runtime cli`, ask the user to run `$agent connect --profile <profile> --service <type>` and keep it online. For `provider-runtime external`, run `$agent connect --profile <profile> --provider-runtime external --provider-url <url>` only to register the external endpoint; the CLI exits after registration and is not in the request path.
+   - `websocket`: default and realtime. The provider opens an outbound WebSocket to MOMOAI relay, so no public inbound port is needed.
+   - `funnel`: direct public endpoint. It requires a provider URL that momoai.pro can reach, usually Tailscale Funnel or another HTTPS tunnel ending in the protected A2A provider path.
+   - `external`: use with `service_type funnel` for a pure already-running public A2A endpoint. Use `service_type websocket` only when the external agent has a MOMOAI adapter/plugin that owns the relay connection itself.
+6. For `provider-runtime cli`, ask the user to run `$agent connect --profile <profile> --service <websocket|funnel>` and keep it online. For pure external Funnel services, run `$agent connect --profile <profile> --provider-runtime external --service funnel --provider-url <url>` only to register the endpoint; the CLI exits after registration and is not in the request path. For OpenClaw, use `$agent openclaw install-a2a --service websocket` so the OpenClaw adapter stores the relay credentials and connects directly.
 7. Only after the provider is online, update the listing to public.
 8. For changes to capabilities or prices, update the profile and listing, then reconnect if the running provider needs the new local profile data.
 
@@ -47,9 +48,9 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 
 - One machine can host multiple CLI agent profiles.
 - The platform routes by `agent_id`; each running provider process is tied to one profile and one platform agent id.
-- Polling providers do not require public inbound ports.
-- CLI HTTP providers require a distinct local `host:port` per concurrently running profile, plus a distinct public/tunnel `provider-url` that forwards to that profile's `/a2a`.
-- External A2A providers are not served by the CLI. Their own service owns the listening port and protocol behavior.
+- WebSocket providers do not require public inbound ports. Multiple profiles can run as separate CLI processes without port conflicts.
+- CLI Funnel providers require a distinct local `host:port` per concurrently running profile, plus a distinct public/tunnel `provider-url` that forwards to that profile's protected A2A path.
+- External A2A providers are not served by the CLI. Their own service owns the listening port and protocol behavior; if they use WebSocket, their MOMOAI adapter owns the relay connection.
 - The provider URL is stored for platform routing and should not be exposed in the public agent card.
 
 ## Constraints
@@ -58,4 +59,4 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 - Do not invent capability ids or fixed token prices. Ask the user when missing.
 - Do not set `fixedTokens` to zero or a negative number.
 - Do not tell users to configure platform private signing keys on their machine; providers normally verify platform JWTs through MOMOAI JWKS.
-- Do not use `http` unless the endpoint is reachable by momoai.pro and protected by the platform invocation JWT.
+- Do not use `funnel` unless the endpoint is reachable by momoai.pro and protected by the platform invocation JWT.

@@ -146,6 +146,19 @@ function handleTaskCancel(request: JsonRpcRequest) {
   return jsonRpcResult(request.id, taskResult(task));
 }
 
+function restStatusForJsonRpcError(code: number) {
+  if (code === -32001) return 404;
+  if (code === -32010) return 401;
+  if (code === -32602 || code === -32600) return 400;
+  return 500;
+}
+
+async function authForMode(authorization: string | undefined, mode: AgentMode, agent: ResolvedAgentConfig) {
+  return mode === 'remote_service'
+    ? await verifyInvocationAuth(authorization, agent.agentId)
+    : undefined;
+}
+
 export async function startAgentServer(options: {
   host: string;
   port: number;
@@ -164,6 +177,61 @@ export async function startAgentServer(options: {
     response.json(buildOasfRecord({ mode: options.mode, agent }));
   });
 
+  app.post('/message:send', async (expressRequest, response) => {
+    const body = expressRequest.body || {};
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id: body.id || body.message?.messageId || makeId('rest'),
+      method: 'message/send',
+      params: body.params || body
+    };
+
+    try {
+      const auth = await authForMode(expressRequest.headers.authorization, options.mode, agent);
+      const result = await handleMessageSend(request, options.mode, agent, auth);
+      if (result.error) {
+        response.status(restStatusForJsonRpcError(result.error.code)).json(result);
+        return;
+      }
+      response.json(result.result);
+    } catch (error) {
+      response.status(401).json(jsonRpcError(request.id, -32010, error instanceof Error ? error.message : String(error)));
+    }
+  });
+
+  app.get('/tasks', (_request, response) => {
+    response.json([...tasks.values()].map(taskResult));
+  });
+
+  app.get('/tasks/:id', (expressRequest, response) => {
+    const result = handleTaskGet({
+      jsonrpc: '2.0',
+      id: expressRequest.params.id,
+      method: 'tasks/get',
+      params: { id: expressRequest.params.id }
+    });
+    if (result.error) {
+      response.status(restStatusForJsonRpcError(result.error.code)).json(result);
+      return;
+    }
+    response.json(result.result);
+  });
+
+  app.post(/^\/tasks\/([^/]+):cancel$/, (expressRequest, response) => {
+    const taskId = expressRequest.params[0];
+    const result = handleTaskCancel({
+      jsonrpc: '2.0',
+      id: taskId,
+      method: 'tasks/cancel',
+      params: { id: taskId }
+    });
+    if (result.error) {
+      response.status(restStatusForJsonRpcError(result.error.code)).json(result);
+      return;
+    }
+    response.json(result.result);
+  });
+
   app.post('/a2a', async (expressRequest, response) => {
     const request = expressRequest.body as JsonRpcRequest;
     if (request?.jsonrpc !== '2.0' || !request.method) {
@@ -172,9 +240,7 @@ export async function startAgentServer(options: {
     }
 
     try {
-      const auth = options.mode === 'remote_service'
-        ? await verifyInvocationAuth(expressRequest.headers.authorization, agent.agentId)
-        : undefined;
+      const auth = await authForMode(expressRequest.headers.authorization, options.mode, agent);
       if (request.method === 'message/send') {
         response.json(await handleMessageSend(request, options.mode, agent, auth));
         return;

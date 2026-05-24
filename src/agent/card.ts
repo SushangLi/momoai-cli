@@ -14,6 +14,12 @@ function localA2aUrl(localBaseUrl: string | undefined, agent?: ResolvedAgentConf
   return `http://${current.host}:${current.port}/a2a`;
 }
 
+function localBaseAgentUrl(localBaseUrl: string | undefined, agent?: ResolvedAgentConfig) {
+  if (localBaseUrl) return localBaseUrl.replace(/\/$/, '');
+  const current = agent || loadConfig().agent;
+  return `http://${current.host}:${current.port}`;
+}
+
 function remoteServiceUrl(agentId?: number, agent?: ResolvedAgentConfig) {
   const config = loadConfig();
   const id = agentId || agent?.agentId || config.agent.agentId;
@@ -41,6 +47,9 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
   const url = mode === 'remote_service'
     ? remoteServiceUrl(options.agentId, options.agent)
     : localA2aUrl(options.localBaseUrl, options.agent);
+  const baseUrl = mode === 'remote_service'
+    ? url
+    : localBaseAgentUrl(options.localBaseUrl, options.agent);
   const skills = renderCapabilities(agent.capabilities);
   return {
     name: agent.name,
@@ -49,7 +58,23 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
     url,
     mode,
     preferredTransport: 'JSONRPC',
-    protocolVersion: '0.3.0',
+    protocolVersion: '1.0.0',
+    supportedInterfaces: [
+      {
+        transport: 'JSON-RPC',
+        url,
+        contentTypes: ['application/json']
+      },
+      ...(mode === 'local'
+        ? [{
+            transport: 'HTTP+JSON',
+            url: baseUrl,
+            contentTypes: ['application/json']
+          }]
+        : [])
+    ],
+    defaultInputModes: ['text/plain', 'application/json'],
+    defaultOutputModes: ['text/plain', 'application/json'],
     capabilities: {
       streaming: false,
       pushNotifications: false,

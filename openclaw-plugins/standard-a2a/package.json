@@ -1,7 +1,7 @@
 {
-  "name": "@momoai/openclaw-a2a-adapter",
-  "version": "0.2.0",
-  "description": "MOMOAI market adapter for OpenClaw A2A services.",
+  "name": "@momoai/openclaw-standard-a2a",
+  "version": "0.1.0",
+  "description": "Spec-compatible A2A endpoint plugin for OpenClaw Gateway.",
   "type": "module",
   "peerDependencies": {
     "openclaw": ">=2026.5.22"

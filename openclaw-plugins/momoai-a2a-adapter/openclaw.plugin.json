@@ -94,6 +94,28 @@
             "type": "number",
             "minimum": 1
           },
+          "serviceType": {
+            "type": "string",
+            "enum": [
+              "websocket",
+              "funnel"
+            ]
+          },
+          "providerUrl": {
+            "type": "string"
+          },
+          "relayUrl": {
+            "type": "string"
+          },
+          "providerToken": {
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
           "requirePlatformAuth": {
             "type": "boolean"
           },

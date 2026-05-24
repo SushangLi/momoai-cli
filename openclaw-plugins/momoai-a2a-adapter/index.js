@@ -7,6 +7,10 @@ function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
+function optionalString(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 function normalizePath(value, fallback) {
   const raw = typeof value === 'string' && value.trim() ? value.trim() : fallback;
   return raw.startsWith('/') ? raw : `/${raw}`;
@@ -14,6 +18,10 @@ function normalizePath(value, fallback) {
 
 function normalizeBaseUrl(value) {
   return String(value || 'https://momoai.pro').replace(/\/$/, '');
+}
+
+function normalizeServiceType(value) {
+  return value === 'funnel' ? 'funnel' : 'websocket';
 }
 
 function normalizeCapability(value, index) {
@@ -67,6 +75,12 @@ function normalizeService(serviceId, rawService) {
     version: String(service.version || '0.1.0').trim(),
     momoaiApiUrl: normalizeBaseUrl(service.momoaiApiUrl),
     momoaiAgentId: service.momoaiAgentId === undefined ? undefined : Number(service.momoaiAgentId),
+    serviceType: normalizeServiceType(service.serviceType || service.service_type),
+    providerUrl: optionalString(service.providerUrl || service.provider_url),
+    relayUrl: optionalString(service.relayUrl || service.relay_url),
+    providerToken: optionalString(service.providerToken || service.provider_token),
+    nodeId: optionalString(service.nodeId || service.node_id),
+    sessionId: optionalString(service.sessionId || service.session_id),
     requirePlatformAuth: service.requirePlatformAuth === undefined ? true : Boolean(service.requirePlatformAuth),
     forwardAuthorization: service.forwardAuthorization === undefined ? false : Boolean(service.forwardAuthorization),
     capabilities: capabilities.length ? capabilities : defaultCapabilities()
@@ -114,6 +128,11 @@ function bearerToken(header) {
   return typeof value === 'string' ? value.replace(/^Bearer\s+/i, '').trim() : '';
 }
 
+function normalizeAuthorization(headerOrToken) {
+  const token = bearerToken(headerOrToken);
+  return token ? `Bearer ${token}` : '';
+}
+
 function base64UrlDecode(value) {
   return Buffer.from(String(value).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
@@ -140,10 +159,10 @@ async function jwksFor(apiUrl) {
   return jwks;
 }
 
-async function verifyPlatformJwt(req, service, capabilityId) {
+async function verifyPlatformJwtFromAuthorization(authorization, service, capabilityId) {
   if (!service.requirePlatformAuth) return {};
 
-  const token = bearerToken(req.headers.authorization);
+  const token = bearerToken(authorization);
   if (!token) throw new Error('Missing platform invocation token');
 
   const segments = token.split('.');
@@ -187,6 +206,10 @@ async function verifyPlatformJwt(req, service, capabilityId) {
   return payload;
 }
 
+async function verifyPlatformJwt(req, service, capabilityId) {
+  return verifyPlatformJwtFromAuthorization(req.headers.authorization, service, capabilityId);
+}
+
 function renderMarketCapabilities(service) {
   return service.capabilities
     .filter((capability) => capability.enabled !== false)
@@ -217,6 +240,7 @@ function buildMarketCard(req, service) {
       provider_url: `${origin}${service.protectedPath}`,
       api_url: service.momoaiApiUrl,
       agent_id: service.momoaiAgentId,
+      service_type: service.serviceType,
       charge_when: 'task_completed',
       capabilities: renderMarketCapabilities(service)
     },
@@ -272,6 +296,62 @@ function registerJsonRoute(api, path, handler) {
   });
 }
 
+function parseJsonOrNull(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function localGatewayOrigin(config) {
+  const gateway = isRecord(config?.gateway) ? config.gateway : {};
+  const rawPort = Number(gateway.port || process.env.OPENCLAW_GATEWAY_PORT || 18789);
+  const port = Number.isFinite(rawPort) && rawPort > 0 ? Math.floor(rawPort) : 18789;
+  const configuredHost = optionalString(gateway.host || gateway.hostname);
+  const bind = optionalString(gateway.bind);
+  const host = configuredHost && configuredHost !== '0.0.0.0'
+    ? configuredHost
+    : bind === 'public'
+      ? '127.0.0.1'
+      : '127.0.0.1';
+  return `http://${host}:${port}`;
+}
+
+async function invokeStandardA2a(service, options) {
+  const body = options.body;
+  const authorization = normalizeAuthorization(options.authorization);
+
+  if (service.protectedPath === service.upstreamPath) {
+    return jsonRpcError(body?.id ?? null, -32603, 'protectedPath must differ from upstreamPath');
+  }
+
+  try {
+    await verifyPlatformJwtFromAuthorization(authorization, service, capabilityIdFromBody(body));
+  } catch (error) {
+    return jsonRpcError(body?.id ?? null, -32010, error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    const response = await fetch(`${options.origin}${service.upstreamPath}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(service.forwardAuthorization && authorization ? { Authorization: authorization } : {})
+      },
+      body: JSON.stringify(body || {})
+    });
+    const responseText = await response.text();
+    const payload = parseJsonOrNull(responseText);
+    if (payload && typeof payload === 'object') return payload;
+    return jsonRpcError(body?.id ?? null, -32000, `Upstream A2A endpoint returned HTTP ${response.status} without JSON-RPC JSON`);
+  } catch (error) {
+    return jsonRpcError(body?.id ?? null, -32000, error instanceof Error ? error.message : String(error));
+  }
+}
+
 function createProtectedHandler(service) {
   return async (req, res) => {
     if (req.method !== 'POST') {
@@ -296,24 +376,160 @@ function createProtectedHandler(service) {
     }
 
     try {
-      const upstreamUrl = `${originFromRequest(req)}${service.upstreamPath}`;
-      const response = await fetch(upstreamUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(service.forwardAuthorization && req.headers.authorization ? { Authorization: Array.isArray(req.headers.authorization) ? req.headers.authorization[0] : req.headers.authorization } : {})
-        },
-        body: bodyBuffer
+      const response = await invokeStandardA2a(service, {
+        origin: originFromRequest(req),
+        authorization: req.headers.authorization,
+        body
       });
-      const responseText = await response.text();
-      res.statusCode = response.status;
+      res.statusCode = 200;
       res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json; charset=utf-8');
-      res.end(responseText);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify(response));
       return true;
     } catch (error) {
       sendJson(res, 502, jsonRpcError(body?.id ?? null, -32000, error instanceof Error ? error.message : String(error)));
       return true;
+    }
+  };
+}
+
+function relayUrlWithToken(relayUrl, providerToken) {
+  if (!relayUrl) throw new Error('Missing relayUrl for websocket service');
+  if (!providerToken) throw new Error('Missing providerToken for websocket service');
+  const url = new URL(relayUrl);
+  if (url.protocol === 'http:') url.protocol = 'ws:';
+  if (url.protocol === 'https:') url.protocol = 'wss:';
+  if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+    throw new Error(`Invalid relayUrl protocol: ${relayUrl}`);
+  }
+  url.searchParams.set('token', providerToken);
+  return url.toString();
+}
+
+async function relayMessageToString(raw) {
+  if (typeof raw === 'string') return raw;
+  if (Buffer.isBuffer(raw)) return raw.toString('utf8');
+  if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString('utf8');
+  if (ArrayBuffer.isView(raw)) return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString('utf8');
+  if (raw && typeof raw.arrayBuffer === 'function') {
+    return Buffer.from(await raw.arrayBuffer()).toString('utf8');
+  }
+  return String(raw || '');
+}
+
+function createRelayService(service) {
+  let stopped = false;
+  let socket;
+  let reconnectTimer;
+
+  return {
+    id: `momoai-a2a-adapter-relay-${service.id}`,
+    start(ctx) {
+      if (service.serviceType !== 'websocket') return;
+      stopped = false;
+      if (!service.relayUrl || !service.providerToken) {
+        ctx.logger.warn?.(`[momoai-a2a-adapter] websocket service ${service.id} is missing relayUrl/providerToken; run momoai "$agent openclaw install-a2a" after publishing the agent.`);
+        return;
+      }
+      if (typeof globalThis.WebSocket !== 'function') {
+        ctx.logger.warn?.('[momoai-a2a-adapter] global WebSocket is unavailable; use Node.js 22+ or expose the service through funnel.');
+        return;
+      }
+
+      let attempt = 0;
+      const origin = localGatewayOrigin(ctx.config);
+
+      const clearReconnect = () => {
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      };
+
+      const scheduleReconnect = () => {
+        if (stopped) return;
+        const delayMs = Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
+        attempt += 1;
+        clearReconnect();
+        reconnectTimer = setTimeout(connect, delayMs);
+      };
+
+      const send = (payload) => {
+        if (!socket || socket.readyState !== 1) return;
+        socket.send(JSON.stringify(payload));
+      };
+
+      const handleMessage = async (event) => {
+        let message;
+        try {
+          message = JSON.parse(await relayMessageToString(event.data));
+        } catch (error) {
+          ctx.logger.warn?.(`[momoai-a2a-adapter] invalid relay message for ${service.id}: ${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+
+        if (message?.type === 'a2a.ready') {
+          ctx.logger.info?.(`[momoai-a2a-adapter] websocket relay ready for ${service.id}: ${message.node_id || service.nodeId || ''}`);
+          return;
+        }
+        if (message?.type !== 'a2a.invoke') return;
+
+        const runId = String(message.run_id || message.runId || '');
+        try {
+          const response = await invokeStandardA2a(service, {
+            origin,
+            authorization: `Bearer ${message.invocation_token || message.invocationToken || ''}`,
+            body: message.request
+          });
+          send({ type: 'a2a.result', run_id: runId, response });
+        } catch (error) {
+          send({
+            type: 'a2a.error',
+            run_id: runId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      };
+
+      function connect() {
+        if (stopped) return;
+        let url;
+        try {
+          url = relayUrlWithToken(service.relayUrl, service.providerToken);
+        } catch (error) {
+          ctx.logger.warn?.(`[momoai-a2a-adapter] ${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+
+        socket = new globalThis.WebSocket(url);
+        const connectTimer = setTimeout(() => {
+          if (socket && socket.readyState === 0) socket.close(1000, 'connect timeout');
+        }, 30_000);
+
+        socket.onopen = () => {
+          clearTimeout(connectTimer);
+          attempt = 0;
+          ctx.logger.info?.(`[momoai-a2a-adapter] websocket relay connected for ${service.id}`);
+        };
+        socket.onmessage = (event) => {
+          void handleMessage(event);
+        };
+        socket.onerror = () => {
+          ctx.logger.warn?.(`[momoai-a2a-adapter] websocket relay error for ${service.id}`);
+        };
+        socket.onclose = (event) => {
+          clearTimeout(connectTimer);
+          if (stopped) return;
+          ctx.logger.warn?.(`[momoai-a2a-adapter] websocket relay closed for ${service.id}: ${event.code || 0} ${event.reason || ''}`);
+          scheduleReconnect();
+        };
+      }
+
+      connect();
+    },
+    stop() {
+      stopped = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+      if (socket && socket.readyState !== 3) socket.close(1000, 'service stop');
     }
   };
 }
@@ -336,6 +552,7 @@ function registerService(api, service) {
     return true;
   });
   registerJsonRoute(api, service.protectedPath, createProtectedHandler(service));
+  if (service.serviceType === 'websocket') api.registerService(createRelayService(service));
   api.logger.info?.(`[momoai-a2a-adapter] registered ${service.id}: ${service.protectedPath} -> ${service.upstreamPath}`);
 }
 

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { buildAgentCard, buildOasfRecord } from '../agent/card.js';
 import { sendA2aMessage } from '../agent/client.js';
 import { installOpenClawA2a } from '../agent/openclaw.js';
+import { exposeViaTailscaleFunnel } from '../agent/tailscale.js';
 import { runRemoteServiceProvider } from '../agent/provider.js';
 import { startAgentServer } from '../agent/server.js';
 import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
@@ -15,12 +16,13 @@ function usage() {
   throw new Error([
     'Usage:',
     '  $agent profile list',
-    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
-    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>]',
-    '  $agent connect [--profile <name>] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>]',
-    '  $agent openclaw install-a2a [--profile <name>] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
+    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
+    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>]',
+    '  $agent connect [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>]',
+    '  $agent expose tailscale [--profile <name>] [--kind cli|openclaw|custom] [--local-base-url http://127.0.0.1:18789] [--provider-path /momoai/a2a/<name>] [--paths <comma-list>] [--include-standard] [--dry-run] [--disable]',
+    '  $agent openclaw install-a2a [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent oasf [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--context <id>] [--show-plan] [--json]'
@@ -42,6 +44,14 @@ function serviceTypeFlag(command: ParsedCommand, fallback: AgentServiceType): Ag
       flagString(command.flags, 'service_type') ||
       fallback
   );
+}
+
+function explicitServiceTypeFlag(command: ParsedCommand): AgentServiceType | undefined {
+  const value =
+    flagString(command.flags, 'service') ||
+    flagString(command.flags, 'service-type') ||
+    flagString(command.flags, 'service_type');
+  return value ? normalizeAgentServiceType(value) : undefined;
 }
 
 function providerRuntimeFlag(command: ParsedCommand, fallback: AgentProviderRuntime): AgentProviderRuntime {
@@ -295,13 +305,72 @@ export async function agentCommand(command: ParsedCommand) {
     return;
   }
 
+  if (action === 'expose') {
+    const [exposeAction] = args;
+    if (exposeAction !== 'tailscale') usage();
+    const kind = flagString(command.flags, 'kind') || 'cli';
+    if (kind !== 'cli' && kind !== 'openclaw' && kind !== 'custom') {
+      throw new Error('--kind must be cli, openclaw, or custom');
+    }
+    const agent = {
+      ...agentWithFlags(config, {
+        ...command,
+        flags: {
+          ...command.flags,
+          service: 'funnel',
+          'provider-runtime': kind === 'openclaw' || kind === 'custom' ? 'external' : 'cli'
+        }
+      }),
+      mode: 'remote_service' as AgentMode,
+      serviceType: 'funnel' as AgentServiceType,
+      providerRuntime: kind === 'openclaw' || kind === 'custom' ? 'external' as AgentProviderRuntime : 'cli' as AgentProviderRuntime
+    };
+    const pathsFlag = flagString(command.flags, 'paths');
+    const result = await exposeViaTailscaleFunnel(agent, {
+      tailscaleBin: flagString(command.flags, 'tailscale-bin') || flagString(command.flags, 'tailscale_bin'),
+      kind,
+      localBaseUrl: flagString(command.flags, 'local-base-url') || flagString(command.flags, 'local_base_url') || flagString(command.flags, 'gateway-base-url') || flagString(command.flags, 'gateway_base_url'),
+      hostname: flagString(command.flags, 'hostname'),
+      httpsPort: flagNumber(command.flags, 'https-port') || flagNumber(command.flags, 'https_port'),
+      serviceId: flagString(command.flags, 'service-id') || flagString(command.flags, 'service_id') || agent.profile,
+      providerPath: flagString(command.flags, 'provider-path') || flagString(command.flags, 'provider_path') || flagString(command.flags, 'protected-path') || flagString(command.flags, 'protected_path'),
+      upstreamPath: flagString(command.flags, 'upstream-path') || flagString(command.flags, 'upstream_path') || flagString(command.flags, 'path'),
+      agentCardPath: flagString(command.flags, 'agent-card-path') || flagString(command.flags, 'agent_card_path') || flagString(command.flags, 'card-path') || flagString(command.flags, 'card_path'),
+      marketPath: flagString(command.flags, 'market-path') || flagString(command.flags, 'market_path'),
+      oasfPath: flagString(command.flags, 'oasf-path') || flagString(command.flags, 'oasf_path'),
+      paths: pathsFlag ? pathsFlag.split(',').map((path) => path.trim()).filter(Boolean) : undefined,
+      includeStandard: command.flags['include-standard'] === true || command.flags.include_standard === true,
+      disable: command.flags.disable === true,
+      dryRun: command.flags['dry-run'] === true || command.flags.dry_run === true
+    });
+    if (result.providerUrl && !result.disabled) {
+      saveAgentProfile(agent.profile, profileUpdateFromAgent({ ...agent, providerUrl: result.providerUrl }, command));
+    }
+    if (command.flags.json) return printJson(result);
+    console.log(result.disabled ? 'Tailscale Funnel exposure removed.' : 'Tailscale Funnel exposure prepared.');
+    console.log(`profile: ${agent.profile}`);
+    console.log(`kind: ${result.kind}`);
+    console.log(`local base url: ${result.localBaseUrl}`);
+    if (result.publicBaseUrl) console.log(`public base url: ${result.publicBaseUrl}`);
+    if (result.providerUrl) console.log(`provider url: ${result.providerUrl}`);
+    for (const path of result.paths) {
+      console.log(`${path.executed ? 'configured' : 'dry-run'}: ${path.path} -> ${path.target}`);
+    }
+    if (!result.hostname) {
+      console.log('note: tailscale hostname was not detected; run tailscale status --json after login or pass --hostname.');
+    }
+    return;
+  }
+
   if (action === 'openclaw') {
     const [openclawAction] = args;
     if (openclawAction !== 'install-a2a') usage();
+    const baseAgent = agentWithFlags(config, command);
+    const serviceType = explicitServiceTypeFlag(command) || 'websocket';
     const agent = {
-      ...agentWithFlags(config, command),
+      ...baseAgent,
       mode: 'remote_service' as AgentMode,
-      serviceType: 'http' as AgentServiceType,
+      serviceType,
       providerRuntime: 'external' as AgentProviderRuntime
     };
     validateBillableCapabilities(agent);
@@ -323,6 +392,7 @@ export async function agentCommand(command: ParsedCommand) {
       marketPath: flagString(command.flags, 'market-path') || flagString(command.flags, 'market_path'),
       oasfPath: flagString(command.flags, 'oasf-path') || flagString(command.flags, 'oasf_path'),
       providerUrl: agent.providerUrl,
+      serviceType: agent.serviceType,
       requirePlatformAuth: command.flags['allow-unauthenticated'] === true || command.flags.allow_unauthenticated === true ? false : true,
       forwardAuthorization: command.flags['forward-authorization'] === true || command.flags.forward_authorization === true,
       restart: command.flags.restart === true
@@ -335,12 +405,19 @@ export async function agentCommand(command: ParsedCommand) {
     console.log('OpenClaw A2A stack prepared.');
     console.log(`profile: ${agent.profile}`);
     console.log(`openclaw service: ${result.serviceId}`);
+    console.log(`service type: ${result.serviceType}`);
     console.log(`standard plugin source: ${result.standardPluginSource}`);
     console.log(`standard plugin installed: ${result.standardPluginInstalled ? 'yes' : 'no'}`);
     console.log(`standard a2a endpoint: ${result.localStandardA2aUrl}`);
     console.log(`momoai protected provider endpoint: ${result.localProtectedProviderUrl}`);
     console.log(`standard agent card: ${result.localAgentCardUrl}`);
     console.log(`momoai market card: ${result.localMarketCardUrl}`);
+    if (result.providerRegistration) {
+      console.log(`provider node: ${result.providerRegistration.node_id}`);
+      if (result.providerRegistration.relay_url) console.log(`relay url: ${result.providerRegistration.relay_url}`);
+    } else {
+      console.log('provider node: not registered (no agent id configured)');
+    }
     if (agent.providerUrl) console.log(`registered provider url in profile: ${agent.providerUrl}`);
     if (!result.restarted) console.log('next: restart OpenClaw Gateway or run again with --restart.');
     return;

@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 export type AgentMode = 'local' | 'remote_service';
-export type AgentServiceType = 'polling' | 'http';
+export type AgentServiceType = 'websocket' | 'funnel';
 export type AgentProviderRuntime = 'cli' | 'external';
 
 export interface AgentCapability {
@@ -109,7 +109,7 @@ const defaultConfig: CliConfig = {
   permissionMode: 'part',
   agent: {
     mode: 'local',
-    serviceType: 'http',
+    serviceType: 'websocket',
     providerRuntime: 'cli',
     name: 'MOMOAI CLI Agent',
     description: 'A MOMOAI command-line agent with market tools, ReAct planning, A2A communication, and layered memory.',
@@ -143,9 +143,11 @@ function normalizeAgentMode(value: unknown): AgentMode {
 }
 
 export function normalizeAgentServiceType(value: unknown): AgentServiceType {
-  if (value === undefined || value === null || value === '') return 'http';
-  if (value === 'polling' || value === 'http') return value;
-  throw new Error('Invalid agent service type. Use polling or http.');
+  if (value === undefined || value === null || value === '') return 'websocket';
+  if (value === 'websocket' || value === 'funnel') return value;
+  if (value === 'polling') return 'websocket';
+  if (value === 'http') return 'funnel';
+  throw new Error('Invalid agent service type. Use websocket or funnel.');
 }
 
 export function normalizeAgentProviderRuntime(value: unknown): AgentProviderRuntime {

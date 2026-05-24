@@ -17,12 +17,14 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.22.3",
     "typescript": "^5.3.0"
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.3.13",
     "express": "^5.2.1",
-    "jose": "^6.2.3"
+    "jose": "^6.2.3",
+    "ws": "^8.21.0"
   }
 }

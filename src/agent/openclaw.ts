@@ -2,11 +2,9 @@ import { execFile, spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ResolvedAgentConfig } from '../config.js';
-
-const DEFAULT_STANDARD_A2A_PLUGIN_SOURCE =
-  process.env.MOMOAI_OPENCLAW_STANDARD_A2A_PLUGIN_SOURCE ||
-  'clawhub:@a2anet/openclaw-a2a-plugin';
+import { MomoClient } from '../client.js';
+import { buildAgentCard, buildOasfRecord } from './card.js';
+import type { AgentServiceType, ResolvedAgentConfig } from '../config.js';
 
 interface InstallOpenClawA2aOptions {
   openclawBin?: string;
@@ -20,9 +18,19 @@ interface InstallOpenClawA2aOptions {
   marketPath?: string;
   oasfPath?: string;
   providerUrl?: string;
+  serviceType?: AgentServiceType;
   requirePlatformAuth?: boolean;
   forwardAuthorization?: boolean;
   restart?: boolean;
+}
+
+interface ProviderRegistration {
+  provider_token: string;
+  node_id: string;
+  session_id: string;
+  service_type?: AgentServiceType;
+  endpoint_url?: string | null;
+  relay_url?: string;
 }
 
 interface CommandResult {
@@ -44,6 +52,12 @@ export interface A2aProbeResult {
 function adapterPluginPath() {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'openclaw-plugins', 'momoai-a2a-adapter');
 }
+
+function standardA2aPluginPath() {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'openclaw-plugins', 'standard-a2a');
+}
+
+const DEFAULT_STANDARD_A2A_PLUGIN_SOURCE = process.env.MOMOAI_OPENCLAW_STANDARD_A2A_PLUGIN_SOURCE || standardA2aPluginPath();
 
 function normalizeRoutePath(value: string | undefined, fallback: string) {
   const raw = (value || fallback).trim();
@@ -106,13 +120,65 @@ function marketCapabilityPayload(agent: ResolvedAgentConfig) {
     }));
 }
 
+function providerCapabilityPayload(agent: ResolvedAgentConfig) {
+  return marketCapabilityPayload(agent).map((capability, index) => ({
+    ...capability,
+    sortOrder: index
+  }));
+}
+
+function standardA2aSkills(agent: ResolvedAgentConfig) {
+  return agent.capabilities
+    .filter((capability) => capability.enabled !== false)
+    .map((capability) => ({
+      id: capability.id,
+      name: capability.name,
+      description: capability.description || '',
+      tags: ['momoai', 'openclaw'],
+      inputModes: ['text/plain'],
+      outputModes: ['text/plain']
+    }));
+}
+
+function standardA2aPatch(agent: ResolvedAgentConfig, options: {
+  serviceId: string;
+  upstreamPath: string;
+  agentCardPath: string;
+}) {
+  return {
+    plugins: {
+      entries: {
+        'openclaw-standard-a2a': {
+          enabled: true,
+          config: {
+            services: {
+              [options.serviceId]: {
+                enabled: true,
+                endpointPath: options.upstreamPath,
+                agentCardPath: options.agentCardPath,
+                name: agent.name,
+                description: agent.description,
+                version: agent.version,
+                skills: standardA2aSkills(agent)
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
 function adapterPatch(agent: ResolvedAgentConfig, options: {
   serviceId: string;
+  serviceType: AgentServiceType;
   upstreamPath: string;
   protectedPath: string;
   agentCardPath: string;
   marketPath: string;
   oasfPath: string;
+  providerUrl?: string;
+  providerRegistration?: ProviderRegistration;
   requirePlatformAuth: boolean;
   forwardAuthorization: boolean;
 }) {
@@ -135,6 +201,12 @@ function adapterPatch(agent: ResolvedAgentConfig, options: {
                 version: agent.version,
                 momoaiApiUrl: process.env.MOMOAI_API_URL || 'https://momoai.pro',
                 ...(agent.agentId ? { momoaiAgentId: agent.agentId } : {}),
+                serviceType: options.serviceType,
+                ...(options.providerUrl ? { providerUrl: options.providerUrl } : {}),
+                ...(options.providerRegistration?.provider_token ? { providerToken: options.providerRegistration.provider_token } : {}),
+                ...(options.providerRegistration?.relay_url ? { relayUrl: options.providerRegistration.relay_url } : {}),
+                ...(options.providerRegistration?.node_id ? { nodeId: options.providerRegistration.node_id } : {}),
+                ...(options.providerRegistration?.session_id ? { sessionId: options.providerRegistration.session_id } : {}),
                 requirePlatformAuth: options.requirePlatformAuth,
                 forwardAuthorization: options.forwardAuthorization,
                 capabilities: marketCapabilityPayload(agent)
@@ -145,6 +217,33 @@ function adapterPatch(agent: ResolvedAgentConfig, options: {
       }
     }
   };
+}
+
+async function registerOpenClawProvider(agent: ResolvedAgentConfig, options: {
+  serviceType: AgentServiceType;
+  providerUrl?: string;
+}): Promise<ProviderRegistration> {
+  const agentId = agent.agentId;
+  if (!agentId) throw new Error('OpenClaw provider registration requires --agent-id or a published profile.');
+  if (options.serviceType === 'funnel' && !options.providerUrl) {
+    throw new Error('OpenClaw funnel registration requires --provider-url <https://.../momoai/a2a/...>.');
+  }
+
+  const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
+  const oasf = buildOasfRecord({ mode: 'remote_service', agentId, agent });
+  const capabilities = providerCapabilityPayload(agent);
+  const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
+    body: {
+      agent_id: agentId,
+      service_type: options.serviceType,
+      ...(options.serviceType === 'funnel' ? { provider_url: options.providerUrl } : {}),
+      card,
+      oasf,
+      capabilities,
+      market_capabilities: capabilities
+    }
+  });
+  return (response as any).data || response;
 }
 
 async function readJson(url: string) {
@@ -220,6 +319,7 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
   const openclawBin = options.openclawBin || 'openclaw';
   const gatewayBaseUrl = normalizeBaseUrl(options.gatewayBaseUrl);
   const serviceId = sanitizeServiceId(options.serviceId || agent.profile);
+  const serviceType = options.serviceType || agent.serviceType || 'websocket';
   const isDefault = serviceId === 'default';
   const upstreamPath = normalizeRoutePath(options.upstreamPath, isDefault ? '/a2a' : `/a2a/${serviceId}`);
   const protectedPath = normalizeRoutePath(options.protectedPath, isDefault ? '/momoai/a2a' : `/momoai/a2a/${serviceId}`);
@@ -235,20 +335,38 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
 
   let standardPluginInstalled = false;
   if ((!beforeProbe.cardOk || !beforeProbe.endpointOk) && !options.skipStandardPlugin) {
+    if (!standardPluginSource) {
+      throw new Error('Standard OpenClaw A2A plugin source is required. Pass --standard-plugin-source or set MOMOAI_OPENCLAW_STANDARD_A2A_PLUGIN_SOURCE.');
+    }
     await execOpenClaw(openclawBin, ['plugins', 'install', standardPluginSource, '--force']);
+    await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(standardA2aPatch(agent, {
+      serviceId,
+      upstreamPath,
+      agentCardPath
+    }), null, 2)}\n`);
     standardPluginInstalled = true;
   }
 
   const adapterRoot = adapterPluginPath();
+  const providerRegistration = agent.agentId
+    ? await registerOpenClawProvider(agent, {
+        serviceType,
+        providerUrl: options.providerUrl
+      })
+    : undefined;
+
   await access(adapterRoot);
   await execOpenClaw(openclawBin, ['plugins', 'install', adapterRoot, '--force']);
   await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(adapterPatch(agent, {
     serviceId,
+    serviceType,
     upstreamPath,
     protectedPath,
     agentCardPath,
     marketPath,
     oasfPath,
+    providerUrl: options.providerUrl,
+    providerRegistration,
     requirePlatformAuth: options.requirePlatformAuth ?? true,
     forwardAuthorization: options.forwardAuthorization ?? false
   }), null, 2)}\n`);
@@ -268,6 +386,8 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
     standardA2aWasAlreadyAvailable: beforeProbe.cardOk && beforeProbe.endpointOk,
     beforeProbe,
     afterProbe,
+    serviceType,
+    providerRegistration,
     upstreamPath,
     protectedPath,
     agentCardPath,

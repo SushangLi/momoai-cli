@@ -1,5 +1,6 @@
 import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
 import { installOpenClawA2a } from './agent/openclaw.js';
+import { exposeViaTailscaleFunnel } from './agent/tailscale.js';
 import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
 import type { AgentCapability, ResolvedAgentConfig } from './config.js';
 
@@ -110,9 +111,9 @@ export const momoTools = [
           description: { type: 'string' },
           price: { type: 'number', description: 'Credits per 1K agent tokens.' },
           available_tokens: { type: 'number' },
-          service_type: { type: 'string', enum: ['polling', 'http'], description: 'polling is delayed and safer; http is realtime and requires a reachable provider_url.' },
-          provider_runtime: { type: 'string', enum: ['cli', 'external'], description: 'cli means this CLI runs the A2A service; external means platform calls the given A2A provider_url directly.' },
-          provider_url: { type: 'string', description: 'Public or tunneled URL ending in /a2a for http service_type.' },
+          service_type: { type: 'string', enum: ['websocket', 'funnel'], description: 'websocket is the default outbound relay; funnel registers a public or tunneled provider_url.' },
+          provider_runtime: { type: 'string', enum: ['cli', 'external'], description: 'cli means this CLI runs the A2A service; external means platform calls the given A2A provider_url directly through funnel.' },
+          provider_url: { type: 'string', description: 'Public or tunneled URL ending in the provider A2A path for funnel service_type.' },
           capabilities: {
             type: 'array',
             items: {
@@ -148,7 +149,7 @@ export const momoTools = [
           description: { type: 'string' },
           price: { type: 'number' },
           available_tokens: { type: 'number' },
-          service_type: { type: 'string', enum: ['polling', 'http'] },
+          service_type: { type: 'string', enum: ['websocket', 'funnel'] },
           provider_runtime: { type: 'string', enum: ['cli', 'external'] },
           provider_url: { type: 'string' },
           capabilities: {
@@ -173,7 +174,7 @@ export const momoTools = [
     type: 'function',
     function: {
       name: 'prepare_openclaw_a2a_market_service',
-      description: 'Probe an OpenClaw/agent port, install a public standard A2A OpenClaw plugin when A2A is missing, then install the MOMOAI market adapter plugin. The CLI is not used as a runtime proxy.',
+      description: 'Probe an OpenClaw/agent port, install the bundled spec-compatible standard A2A OpenClaw plugin when A2A is missing, then install the MOMOAI market adapter plugin. The CLI is not used as a runtime proxy.',
       parameters: {
         type: 'object',
         properties: {
@@ -181,9 +182,10 @@ export const momoTools = [
           name: { type: 'string' },
           description: { type: 'string' },
           agent_id: { type: 'number', description: 'MOMOAI platform agent id, if already published.' },
-          provider_url: { type: 'string', description: 'Public URL for the MOMOAI protected provider endpoint.' },
+          service_type: { type: 'string', enum: ['websocket', 'funnel'], default: 'websocket', description: 'websocket registers an outbound provider relay; funnel registers a public direct provider_url.' },
+          provider_url: { type: 'string', description: 'Public URL for the MOMOAI protected provider endpoint when service_type is funnel.' },
           gateway_base_url: { type: 'string', description: 'Local OpenClaw Gateway base URL, usually http://127.0.0.1:18789.' },
-          standard_plugin_source: { type: 'string', description: 'Public OpenClaw plugin source for standard A2A communication. Override this when an official source is available.' },
+          standard_plugin_source: { type: 'string', description: 'OpenClaw plugin source for standard A2A communication. Defaults to the bundled spec-compatible plugin; override when an official source is available.' },
           skip_standard_plugin: { type: 'boolean', default: false, description: 'Skip installing the standard A2A plugin when the port already supports A2A or the user manages it separately.' },
           service_id: { type: 'string' },
           upstream_path: { type: 'string', description: 'Standard A2A endpoint path owned by the public A2A plugin, for example /a2a/gomoku.' },
@@ -215,6 +217,33 @@ export const momoTools = [
   {
     type: 'function',
     function: {
+      name: 'expose_agent_with_tailscale_funnel',
+      description: 'Expose only the required local A2A/MOMOAI paths through Tailscale Funnel. This does not proxy through momoai-cli at runtime.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string' },
+          kind: { type: 'string', enum: ['cli', 'openclaw', 'custom'], description: 'cli exposes this CLI profile; openclaw exposes OpenClaw A2A/MOMOAI adapter paths; custom exposes explicit paths.' },
+          local_base_url: { type: 'string', description: 'Loopback target such as http://127.0.0.1:18789.' },
+          hostname: { type: 'string', description: 'Optional explicit Tailscale Funnel hostname. If omitted, CLI reads tailscale status.' },
+          https_port: { type: 'number', default: 443 },
+          service_id: { type: 'string' },
+          provider_path: { type: 'string', description: 'Public provider path registered with momoai.pro, for example /momoai/a2a/gomoku or /a2a.' },
+          upstream_path: { type: 'string' },
+          agent_card_path: { type: 'string' },
+          market_path: { type: 'string' },
+          oasf_path: { type: 'string' },
+          paths: { type: 'array', items: { type: 'string' }, description: 'Additional exact paths to expose. Do not expose the whole OpenClaw gateway.' },
+          include_standard: { type: 'boolean', default: false, description: 'For OpenClaw, also expose the generic A2A endpoint and agent card, not only MOMOAI protected paths.' },
+          disable: { type: 'boolean', default: false },
+          dry_run: { type: 'boolean', default: false }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'install_openclaw_a2a_plugin',
       description: 'Backward-compatible alias for prepare_openclaw_a2a_market_service.',
       parameters: {
@@ -224,6 +253,7 @@ export const momoTools = [
           name: { type: 'string' },
           description: { type: 'string' },
           agent_id: { type: 'number' },
+          service_type: { type: 'string', enum: ['websocket', 'funnel'], default: 'websocket' },
           provider_url: { type: 'string' },
           gateway_base_url: { type: 'string' },
           standard_plugin_source: { type: 'string' },
@@ -279,7 +309,7 @@ function intArg(args: Record<string, unknown>, name: string) {
 }
 
 async function confirmIfNeeded(name: string, args: Record<string, unknown>, confirm?: ConfirmTool) {
-  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing' || name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service';
+  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing' || name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service' || name === 'expose_agent_with_tailscale_funnel';
   if (!isTrade || loadConfig().permissionMode === 'full') return true;
   if (!confirm) return false;
   return confirm(name, args);
@@ -414,14 +444,15 @@ export async function executeToolCall(
       return listing;
     }
     if (name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service') {
+      const serviceType = normalizeAgentServiceType(args.service_type || args.serviceType || 'websocket');
       const agent = {
         ...agentForTool({
           ...args,
-          service_type: 'http',
+          service_type: serviceType,
           provider_runtime: 'external'
         }),
         providerRuntime: 'external' as const,
-        serviceType: 'http' as const
+        serviceType
       };
       const result = await installOpenClawA2a(agent, {
         gatewayBaseUrl: typeof args.gateway_base_url === 'string' ? args.gateway_base_url : undefined,
@@ -434,11 +465,40 @@ export async function executeToolCall(
         marketPath: typeof args.market_path === 'string' ? args.market_path : undefined,
         oasfPath: typeof args.oasf_path === 'string' ? args.oasf_path : undefined,
         providerUrl: agent.providerUrl,
+        serviceType: agent.serviceType,
         requirePlatformAuth: args.require_platform_auth === undefined ? true : Boolean(args.require_platform_auth),
         forwardAuthorization: args.forward_authorization === true,
         restart: args.restart === true
       });
       saveToolAgent(agent);
+      return result;
+    }
+    if (name === 'expose_agent_with_tailscale_funnel') {
+      const agent = agentForTool({
+        ...args,
+        service_type: 'funnel',
+        provider_runtime: args.kind === 'openclaw' || args.kind === 'custom' ? 'external' : 'cli'
+      });
+      const result = await exposeViaTailscaleFunnel(agent, {
+        kind: args.kind === 'openclaw' || args.kind === 'custom' ? args.kind : 'cli',
+        localBaseUrl: typeof args.local_base_url === 'string' ? args.local_base_url : undefined,
+        hostname: typeof args.hostname === 'string' ? args.hostname : undefined,
+        httpsPort: args.https_port === undefined ? undefined : Number(args.https_port),
+        serviceId: typeof args.service_id === 'string' ? args.service_id : undefined,
+        providerPath: typeof args.provider_path === 'string' ? args.provider_path : undefined,
+        upstreamPath: typeof args.upstream_path === 'string' ? args.upstream_path : undefined,
+        agentCardPath: typeof args.agent_card_path === 'string' ? args.agent_card_path : undefined,
+        marketPath: typeof args.market_path === 'string' ? args.market_path : undefined,
+        oasfPath: typeof args.oasf_path === 'string' ? args.oasf_path : undefined,
+        paths: Array.isArray(args.paths) ? args.paths.map(String) : undefined,
+        includeStandard: args.include_standard === true,
+        disable: args.disable === true,
+        dryRun: args.dry_run === true
+      });
+      if (result.providerUrl && !result.disabled) {
+        agent.providerUrl = result.providerUrl;
+        saveToolAgent(agent);
+      }
       return result;
     }
     return { error: `Unknown tool: ${name}` };
