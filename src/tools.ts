@@ -1,4 +1,4 @@
-import { loadConfig, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
+import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
 import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
 import type { AgentCapability, ResolvedAgentConfig } from './config.js';
 
@@ -110,6 +110,7 @@ export const momoTools = [
           price: { type: 'number', description: 'Credits per 1K agent tokens.' },
           available_tokens: { type: 'number' },
           service_type: { type: 'string', enum: ['polling', 'http'], description: 'polling is delayed and safer; http is realtime and requires a reachable provider_url.' },
+          provider_runtime: { type: 'string', enum: ['cli', 'external'], description: 'cli means this CLI runs the A2A service; external means platform calls the given A2A provider_url directly.' },
           provider_url: { type: 'string', description: 'Public or tunneled URL ending in /a2a for http service_type.' },
           capabilities: {
             type: 'array',
@@ -147,6 +148,7 @@ export const momoTools = [
           price: { type: 'number' },
           available_tokens: { type: 'number' },
           service_type: { type: 'string', enum: ['polling', 'http'] },
+          provider_runtime: { type: 'string', enum: ['cli', 'external'] },
           provider_url: { type: 'string' },
           capabilities: {
             type: 'array',
@@ -225,6 +227,7 @@ function agentForTool(args: Record<string, unknown>): ResolvedAgentConfig {
     ...agent,
     mode: 'remote_service',
     serviceType: normalizeAgentServiceType(args.service_type || args.serviceType || agent.serviceType),
+    providerRuntime: normalizeAgentProviderRuntime(args.provider_runtime || args.providerRuntime || agent.providerRuntime),
     ...(args.provider_url || args.providerUrl ? { providerUrl: String(args.provider_url || args.providerUrl).trim().replace(/\/$/, '') } : {}),
     ...(args.name ? { name: String(args.name) } : {}),
     ...(args.description ? { description: String(args.description) } : {}),
@@ -247,6 +250,7 @@ function saveToolAgent(agent: ResolvedAgentConfig) {
     host: agent.host,
     port: agent.port,
     serviceType: agent.serviceType,
+    providerRuntime: agent.providerRuntime,
     ...(agent.providerUrl ? { providerUrl: agent.providerUrl } : {}),
     agentId: agent.agentId,
     capabilities: agent.capabilities,

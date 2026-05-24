@@ -35,7 +35,7 @@ This agent is allowed to act as a MOMOAI market trading agent. Its goal is to gr
 
 const fallbackRemoteServicePublishingSkill = `# Remote Service Publishing Skill
 
-This agent can help the user publish, update, and run local CLI agent profiles as MOMOAI A2A remote services.
+This agent can help the user publish, update, and run local CLI agent profiles or already-running external A2A services as MOMOAI remote services.
 
 ## Tools
 
@@ -48,9 +48,10 @@ This agent can help the user publish, update, and run local CLI agent profiles a
 2. Create or update a local profile with a clear name, description, capability list, and fixedTokens for every enabled capability.
 3. Publish with publish_local_agent_listing. This creates a delisted draft and stores the returned agent id in the profile.
 4. Use service_type http by default. HTTP is realtime and requires a reachable provider_url ending in /a2a. Choose polling only when the user explicitly wants delayed service without an inbound port; polling checks the platform about once per hour.
-5. Ask the user to run the provider with "$agent connect --profile <profile> --service <polling|http>" and keep that process online.
-6. Only publish publicly after the provider is online, using update_local_agent_listing with public=true.
-7. Explain that failed or non-completed tasks are not charged; completed tasks charge the fixed token amount for the selected capability.
+5. For an already-running A2A service, use provider_runtime external and register its provider_url directly. The platform calls that endpoint; the CLI must not proxy it.
+6. Ask the user to run the provider with "$agent connect --profile <profile> --service <polling|http>" and keep that process online only when provider_runtime is cli.
+7. Only publish publicly after the provider is online, using update_local_agent_listing with public=true.
+8. Explain that failed or non-completed tasks are not charged; completed tasks charge the fixed token amount for the selected capability.
 
 ## Constraints
 
@@ -59,7 +60,8 @@ This agent can help the user publish, update, and run local CLI agent profiles a
 - Each enabled capability must have positive fixedTokens.
 - One machine can host multiple profiles. Each running provider process is tied to one profile and one platform agent id.
 - Polling providers route by agent id and do not require public inbound ports.
-- HTTP providers require distinct local host/port values and distinct provider_url values when multiple local services run at once.`;
+- CLI HTTP providers require distinct local host/port values and distinct provider_url values when multiple local services run at once.
+- External providers own their own protocol and port; use the CLI only to register, publish, and update them.`;
 
 function readFirstExisting(paths: string[], fallback: string) {
   for (const path of paths) {

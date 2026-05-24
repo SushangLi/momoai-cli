@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 
 export type AgentMode = 'local' | 'remote_service';
 export type AgentServiceType = 'polling' | 'http';
+export type AgentProviderRuntime = 'cli' | 'external';
 
 export interface AgentCapability {
   id: string;
@@ -23,6 +24,7 @@ export interface AgentInstanceConfig {
   mode?: AgentMode;
   serviceType?: AgentServiceType;
   providerUrl?: string;
+  providerRuntime?: AgentProviderRuntime;
   name?: string;
   description?: string;
   version?: string;
@@ -38,6 +40,7 @@ export interface ResolvedAgentConfig {
   mode: AgentMode;
   serviceType: AgentServiceType;
   providerUrl?: string;
+  providerRuntime: AgentProviderRuntime;
   name: string;
   description: string;
   version: string;
@@ -107,6 +110,7 @@ const defaultConfig: CliConfig = {
   agent: {
     mode: 'local',
     serviceType: 'http',
+    providerRuntime: 'cli',
     name: 'MOMOAI CLI Agent',
     description: 'A MOMOAI command-line agent with market tools, ReAct planning, A2A communication, and layered memory.',
     version: '0.1.0',
@@ -142,6 +146,12 @@ export function normalizeAgentServiceType(value: unknown): AgentServiceType {
   if (value === undefined || value === null || value === '') return 'http';
   if (value === 'polling' || value === 'http') return value;
   throw new Error('Invalid agent service type. Use polling or http.');
+}
+
+export function normalizeAgentProviderRuntime(value: unknown): AgentProviderRuntime {
+  if (value === undefined || value === null || value === '') return 'cli';
+  if (value === 'cli' || value === 'external') return value;
+  throw new Error('Invalid agent provider runtime. Use cli or external.');
 }
 
 function normalizeAgentDescription(value: unknown): string | undefined {
@@ -207,6 +217,7 @@ function normalizeAgentInstance(value: unknown): AgentInstanceConfig {
     ...(agent.mode === undefined ? {} : { mode: normalizeAgentMode(agent.mode) }),
     ...(agent.serviceType === undefined ? {} : { serviceType: normalizeAgentServiceType(agent.serviceType) }),
     ...(typeof agent.providerUrl === 'string' && agent.providerUrl.trim() ? { providerUrl: agent.providerUrl.trim().replace(/\/$/, '') } : {}),
+    ...(agent.providerRuntime === undefined ? {} : { providerRuntime: normalizeAgentProviderRuntime(agent.providerRuntime) }),
     ...(typeof agent.name === 'string' && agent.name.trim() ? { name: agent.name.trim() } : {}),
     ...(typeof agent.description === 'string' && agent.description.trim() ? { description: normalizeAgentDescription(agent.description) || agent.description.trim() } : {}),
     ...(typeof agent.version === 'string' && agent.version.trim() ? { version: agent.version.trim() } : {}),
@@ -245,6 +256,7 @@ function buildBaseAgent(storedAgent: Partial<CliConfig['agent']> | undefined): C
     mode: normalizeAgentMode(process.env.MOMOAI_AGENT_MODE || storedAgent?.mode || defaultConfig.agent.mode),
     serviceType: normalizeAgentServiceType(process.env.MOMOAI_AGENT_SERVICE_TYPE || storedAgent?.serviceType || defaultConfig.agent.serviceType),
     providerUrl: (process.env.MOMOAI_AGENT_PROVIDER_URL || storedAgent?.providerUrl || '').replace(/\/$/, '') || undefined,
+    providerRuntime: normalizeAgentProviderRuntime(process.env.MOMOAI_AGENT_PROVIDER_RUNTIME || storedAgent?.providerRuntime || defaultConfig.agent.providerRuntime),
     description: normalizeAgentDescription(storedAgent?.description) || defaultConfig.agent.description,
     host: process.env.MOMOAI_AGENT_HOST || storedAgent?.host || defaultConfig.agent.host,
     port: Number(process.env.MOMOAI_AGENT_PORT || storedAgent?.port || defaultConfig.agent.port),
@@ -317,6 +329,7 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
     mode: normalizeAgentMode(merged.agent?.mode),
     serviceType: normalizeAgentServiceType(merged.agent?.serviceType),
     providerUrl: merged.agent?.providerUrl?.replace(/\/$/, ''),
+    providerRuntime: normalizeAgentProviderRuntime(merged.agent?.providerRuntime),
     capabilities: normalizeCapabilities(merged.agent?.capabilities),
     listing: normalizeListing(merged.agent?.listing)
   };
@@ -357,6 +370,7 @@ export function resolveAgentConfig(config: CliConfig, profileName?: string): Res
     mode: normalizeAgentMode(profile.mode || base.mode),
     serviceType: normalizeAgentServiceType(profile.serviceType || base.serviceType),
     providerUrl: profile.providerUrl || base.providerUrl,
+    providerRuntime: normalizeAgentProviderRuntime(profile.providerRuntime || base.providerRuntime),
     name: profile.name || base.name,
     description: normalizeAgentDescription(profile.description) || base.description,
     version: profile.version || base.version,

@@ -41,6 +41,9 @@ function isLocalPlatformUrl(apiUrl: string) {
 
 function providerEndpoint(agent: ResolvedAgentConfig, allowLocalFallback: boolean) {
   if (agent.providerUrl) return agent.providerUrl.replace(/\/$/, '');
+  if (agent.providerRuntime === 'external') {
+    throw new Error('External A2A provider registration requires --provider-url <https://.../a2a>.');
+  }
   if (allowLocalFallback) return localA2aEndpoint(agent);
   throw new Error('HTTP remote service requires --provider-url <https://.../a2a> so momoai.pro can reach this local provider.');
 }
@@ -169,11 +172,22 @@ export async function runRemoteServiceProvider(agent: ResolvedAgentConfig) {
   const config = loadConfig();
   if (!agent.agentId) throw new Error('Remote service provider requires an agent id.');
   const allowLocalFallback = isLocalPlatformUrl(config.apiUrl);
+  if (agent.providerRuntime === 'external' && agent.serviceType !== 'http') {
+    throw new Error('External providers must use --service http because the platform calls their endpoint directly.');
+  }
   const registration = await registerProvider(agent, allowLocalFallback);
   console.log(`MOMOAI remote service provider connected to ${config.apiUrl}`);
   console.log(`profile: ${agent.profile}`);
   console.log(`agent: ${agent.agentId}`);
   console.log(`node: ${registration.node_id}`);
+  console.log(`provider runtime: ${agent.providerRuntime}`);
+
+  if (agent.providerRuntime === 'external') {
+    console.log('service: http');
+    console.log(`external provider endpoint: ${providerEndpoint(agent, allowLocalFallback)}`);
+    console.log('registered external A2A provider; CLI will not proxy or start a local server.');
+    return;
+  }
 
   if (agent.serviceType === 'http') {
     const endpoint = providerEndpoint(agent, allowLocalFallback);

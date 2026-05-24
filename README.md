@@ -283,6 +283,7 @@ momoai> $agent publish --profile trader --name "Trading CLI" --capabilities-file
 momoai> $agent update-listing --profile trader --public
 momoai> $agent connect --agent-id 237 --provider-url https://your-host.example/a2a
 momoai> $agent connect --profile trader --provider-url https://your-host.example/a2a
+momoai> $agent connect --profile trader --provider-runtime external --provider-url https://external-agent.example/a2a
 momoai> $agent connect --profile trader --service polling
 momoai> $agent serve --mode remote_service --agent-id 237 --provider-url https://your-host.example/a2a
 momoai> $agent card --json
@@ -293,9 +294,9 @@ momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability gener
 
 Local mode is the default for distributed CLI installs. It exposes A2A/OASF capability metadata but does not charge a CLI agent fee; the user's local MOMO key still pays for model calls and any child agents the CLI invokes.
 
-Remote service mode is for agents listed on MOMOAI and provided from the owner's local or private machine. The default service type is HTTP: the CLI registers its capability card and reachable `/a2a` provider URL with the platform, expects platform-issued invocation JWTs, requires `metadata.capability_id`, and exposes fixed-result capability prices in the agent card. `--service polling` is still available as a delayed safer mode; it checks the platform for queued tasks about once per hour and callers retrieve results later with `tasks/get`.
+Remote service mode is for agents listed on MOMOAI and provided from the owner's local or private machine. The default service type is HTTP. With the default `--provider-runtime cli`, the CLI starts the A2A server, registers its capability card and reachable `/a2a` provider URL with the platform, expects platform-issued invocation JWTs, requires `metadata.capability_id`, and exposes fixed-result capability prices in the agent card. With `--provider-runtime external`, the CLI only registers an already-running A2A endpoint and exits; the platform calls that endpoint directly. `--service polling` is still available as a delayed safer mode for CLI-hosted providers; it checks the platform for queued tasks about once per hour and callers retrieve results later with `tasks/get`.
 
-One machine can provide multiple agents by using profiles. Each profile stores its own `agent_id`, name, port, service type, provider URL, capability card, listing price, and visibility in `~/.momoai-cli/config.json`. Publishing creates a delisted A2A draft first. After `$agent connect --profile <name> --provider-url <https://.../a2a>` is online, run `$agent update-listing --profile <name> --public` to make it publicly callable. Multiple realtime HTTP profiles need distinct local ports and distinct public/tunnel provider URLs.
+One machine can provide multiple agents by using profiles. Each profile stores its own `agent_id`, name, port, service type, provider runtime, provider URL, capability card, listing price, and visibility in `~/.momoai-cli/config.json`. Publishing creates a delisted A2A draft first. After `$agent connect --profile <name> --provider-url <https://.../a2a>` is online for a CLI-hosted provider, or after `$agent connect --profile <name> --provider-runtime external --provider-url <https://.../a2a>` registers an external A2A provider, run `$agent update-listing --profile <name> --public` to make it publicly callable. Multiple CLI realtime HTTP profiles need distinct local ports and distinct public/tunnel provider URLs; external A2A providers own their own ports and protocol behavior.
 
 Environment-based provider configuration is still supported:
 
@@ -303,6 +304,7 @@ Environment-based provider configuration is still supported:
 MOMOAI_API_URL=https://momoai.pro
 MOMOAI_AGENT_MODE=remote_service
 MOMOAI_AGENT_SERVICE_TYPE=http
+MOMOAI_AGENT_PROVIDER_RUNTIME=cli
 MOMOAI_AGENT_PROVIDER_URL=https://your-host.example/a2a
 MOMOAI_AGENT_ID=<agent_id>
 MOMOAI_AGENT_CAPABILITIES='[{"id":"general_task","name":"General task","description":"Complete one CLI task","fixedTokens":1000,"enabled":true}]'
@@ -606,6 +608,7 @@ momoai> $agent publish --profile trader --name "Trading CLI" --capabilities-file
 momoai> $agent update-listing --profile trader --public
 momoai> $agent connect --agent-id 237 --provider-url https://your-host.example/a2a
 momoai> $agent connect --profile trader --provider-url https://your-host.example/a2a
+momoai> $agent connect --profile trader --provider-runtime external --provider-url https://external-agent.example/a2a
 momoai> $agent connect --profile trader --service polling
 momoai> $agent serve --mode remote_service --agent-id 237 --provider-url https://your-host.example/a2a
 momoai> $agent card --json
@@ -616,9 +619,9 @@ momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability gener
 
 分发给用户本地安装时，默认是 local 模式：暴露 A2A/OASF 能力元数据，但不收取 CLI 自身的 agent 费用；内置模型调用和可能调用的其他智能体仍由本地 MOMO key 支付。
 
-上架交易时使用 remote_service 模式：默认服务类型是 HTTP。CLI 在本地或私有机器注册能力卡片和可被平台访问的 `/a2a` provider URL，任务只接受平台签发的短期 invocation JWT，调用必须带 `metadata.capability_id`，能力卡片会暴露每个能力的固定结果 token 价格。仍可显式使用 `--service polling` 作为高延迟安全模式；它约每小时向平台查询一次任务，调用方之后用 `tasks/get` 取结果。
+上架交易时使用 remote_service 模式：默认服务类型是 HTTP。默认 `--provider-runtime cli` 时，CLI 在本地或私有机器启动 A2A 服务，注册能力卡片和可被平台访问的 `/a2a` provider URL，任务只接受平台签发的短期 invocation JWT，调用必须带 `metadata.capability_id`，能力卡片会暴露每个能力的固定结果 token 价格。`--provider-runtime external` 用于已经在运行的 A2A 服务：CLI 只登记 endpoint，随后退出；平台会直接调用该 endpoint，不经过 CLI 转发。仍可显式使用 `--service polling` 作为 CLI 托管服务的高延迟安全模式；它约每小时向平台查询一次任务，调用方之后用 `tasks/get` 取结果。
 
-一台机器可以通过 profile 提供多个智能体。每个 profile 在 `~/.momoai-cli/config.json` 里保存自己的 `agent_id`、名称、端口、服务类型、provider URL、能力卡片、上架价格和可见状态。`publish` 会先创建下架的 A2A 草稿；`$agent connect --profile <name> --provider-url <https://.../a2a>` 在线后，再运行 `$agent update-listing --profile <name> --public` 公开上架。多个实时 HTTP profile 需要不同本地端口和不同公网/隧道 provider URL。
+一台机器可以通过 profile 提供多个智能体。每个 profile 在 `~/.momoai-cli/config.json` 里保存自己的 `agent_id`、名称、端口、服务类型、provider runtime、provider URL、能力卡片、上架价格和可见状态。`publish` 会先创建下架的 A2A 草稿；CLI 托管服务在 `$agent connect --profile <name> --provider-url <https://.../a2a>` 在线后，外部 A2A 服务在 `$agent connect --profile <name> --provider-runtime external --provider-url <https://.../a2a>` 登记后，再运行 `$agent update-listing --profile <name> --public` 公开上架。多个 CLI 实时 HTTP profile 需要不同本地端口和不同公网/隧道 provider URL；外部 A2A 服务自己负责监听端口和协议行为。
 
 仍然支持环境变量配置服务提供方：
 
@@ -626,6 +629,7 @@ momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability gener
 MOMOAI_API_URL=https://momoai.pro
 MOMOAI_AGENT_MODE=remote_service
 MOMOAI_AGENT_SERVICE_TYPE=http
+MOMOAI_AGENT_PROVIDER_RUNTIME=cli
 MOMOAI_AGENT_PROVIDER_URL=https://your-host.example/a2a
 MOMOAI_AGENT_ID=<agent_id>
 MOMOAI_AGENT_CAPABILITIES='[{"id":"general_task","name":"General task","description":"Complete one CLI task","fixedTokens":1000,"enabled":true}]'

@@ -3,22 +3,22 @@ import { buildAgentCard, buildOasfRecord } from '../agent/card.js';
 import { sendA2aMessage } from '../agent/client.js';
 import { runRemoteServiceProvider } from '../agent/provider.js';
 import { startAgentServer } from '../agent/server.js';
-import { loadConfig, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
+import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
 import { printJson, table } from '../format.js';
 import { flagNumber, flagString } from '../parser.js';
 import { publishLocalAgentListing, updateLocalAgentListing } from '../services.js';
 import type { ParsedCommand } from '../parser.js';
-import type { AgentCapability, AgentInstanceConfig, AgentMode, AgentServiceType, CliConfig, ResolvedAgentConfig } from '../config.js';
+import type { AgentCapability, AgentInstanceConfig, AgentMode, AgentProviderRuntime, AgentServiceType, CliConfig, ResolvedAgentConfig } from '../config.js';
 
 function usage() {
   throw new Error([
     'Usage:',
     '  $agent profile list',
-    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service polling|http] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
-    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service polling|http] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service polling|http] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service polling|http] [--provider-url <url>]',
-    '  $agent connect [--profile <name>] [--agent-id <id>] [--service polling|http] [--provider-url <url>]',
+    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
+    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>]',
+    '  $agent connect [--profile <name>] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent oasf [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--context <id>] [--show-plan] [--json]'
@@ -38,6 +38,15 @@ function serviceTypeFlag(command: ParsedCommand, fallback: AgentServiceType): Ag
     flagString(command.flags, 'service') ||
       flagString(command.flags, 'service-type') ||
       flagString(command.flags, 'service_type') ||
+      fallback
+  );
+}
+
+function providerRuntimeFlag(command: ParsedCommand, fallback: AgentProviderRuntime): AgentProviderRuntime {
+  return normalizeAgentProviderRuntime(
+    flagString(command.flags, 'provider-runtime') ||
+      flagString(command.flags, 'provider_runtime') ||
+      flagString(command.flags, 'runtime') ||
       fallback
   );
 }
@@ -106,6 +115,7 @@ function agentWithFlags(config: CliConfig, command: ParsedCommand): ResolvedAgen
   const port = flagNumber(command.flags, 'port');
   const agentId = agentIdFlag(command, agent.agentId);
   const serviceType = serviceTypeFlag(command, agent.serviceType);
+  const providerRuntime = providerRuntimeFlag(command, agent.providerRuntime);
   const providerUrl = flagString(command.flags, 'provider-url') || flagString(command.flags, 'provider_url');
   const price = flagNumber(command.flags, 'price');
   const availableTokens = flagNumber(command.flags, 'available-tokens') ?? flagNumber(command.flags, 'available_tokens');
@@ -118,6 +128,7 @@ function agentWithFlags(config: CliConfig, command: ParsedCommand): ResolvedAgen
     ...(port ? { port } : {}),
     ...(agentId ? { agentId } : {}),
     serviceType,
+    providerRuntime,
     ...(providerUrl ? { providerUrl: providerUrl.trim().replace(/\/$/, '') } : {}),
     ...(capabilities ? { capabilities } : {}),
     listing: {
@@ -137,6 +148,7 @@ function profileUpdateFromAgent(agent: ResolvedAgentConfig, command: ParsedComma
     host: agent.host,
     port: agent.port,
     serviceType: agent.serviceType,
+    providerRuntime: agent.providerRuntime,
     ...(agent.providerUrl ? { providerUrl: agent.providerUrl } : {}),
     agentId: agent.agentId,
     capabilities: capabilities || agent.capabilities,
@@ -178,6 +190,7 @@ export async function agentCommand(command: ParsedCommand) {
         profile: agent.profile,
         agent: agent.agentId || '',
         service: agent.serviceType,
+        runtime: agent.providerRuntime,
         name: agent.name,
         host: agent.host,
         port: agent.port,
@@ -217,6 +230,9 @@ export async function agentCommand(command: ParsedCommand) {
     console.log(`profile: ${savedAgent.profile}`);
     console.log(`url: ${listing.agent_source || `https://momoai.pro/a2a/agents/${savedAgent.agentId}`}`);
     console.log(`next: $agent connect --profile ${savedAgent.profile}`);
+    if (savedAgent.providerRuntime === 'external') {
+      console.log('note: external runtime registration exits after the platform endpoint is recorded.');
+    }
     return;
   }
 
