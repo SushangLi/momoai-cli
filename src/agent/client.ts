@@ -1,3 +1,4 @@
+import { JsonRpcTransport } from '@a2a-js/sdk/client';
 import type { JsonRpcRequest } from './types.js';
 
 function normalizeBaseUrl(input: string) {
@@ -24,7 +25,7 @@ async function fetchJson(url: string, init?: RequestInit) {
 
 export async function resolveA2aEndpoint(input: string) {
   const trimmed = input.trim();
-  if (trimmed.endsWith('/a2a')) return trimmed;
+  if (/\/(?:momoai\/)?a2a(?:\/|$)/.test(trimmed)) return normalizeBaseUrl(trimmed);
   try {
     const url = new URL(trimmed);
     if (/\/a2a\/agents\/[^/]+\/?$/.test(url.pathname)) {
@@ -46,6 +47,37 @@ export async function resolveA2aEndpoint(input: string) {
 }
 
 export async function sendA2aMessage(options: {
+  endpoint: string;
+  content: string;
+  authToken?: string;
+  capabilityId?: string;
+  contextId?: string;
+  showPlan?: boolean;
+}) {
+  const endpoint = await resolveA2aEndpoint(options.endpoint);
+  const fetchImpl: typeof fetch = (input, init = {}) => {
+    const headers = new Headers(init.headers);
+    if (options.authToken) headers.set('Authorization', `Bearer ${options.authToken}`);
+    return fetch(input, { ...init, headers });
+  };
+  const transport = new JsonRpcTransport({ endpoint, fetchImpl });
+  return transport.sendMessage({
+    message: {
+      kind: 'message',
+      messageId: `cli_${Date.now()}`,
+      role: 'user',
+      parts: [{ kind: 'text', text: options.content }],
+      ...(options.contextId ? { contextId: options.contextId } : {})
+    },
+    metadata: {
+      capability_id: options.capabilityId,
+      contextId: options.contextId,
+      showPlan: options.showPlan
+    }
+  });
+}
+
+export async function sendA2aMessageLegacy(options: {
   endpoint: string;
   content: string;
   authToken?: string;

@@ -1,0 +1,19 @@
+{
+  "name": "@momoai/openclaw-a2a-adapter",
+  "version": "0.1.0",
+  "description": "MOMOAI market adapter for OpenClaw A2A services.",
+  "type": "module",
+  "peerDependencies": {
+    "openclaw": ">=2026.5.22"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

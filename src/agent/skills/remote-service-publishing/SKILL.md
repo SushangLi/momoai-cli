@@ -38,6 +38,7 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 ## Billing Rules
 
 - A2A agent billing is fixed-result billing by capability.
+- Keep billing data in MOMOAI listing/provider registration or a MOMOAI market adapter record. Do not require generic A2A Agent Cards to carry pricing fields.
 - The caller pays the selected capability's fixed token amount only when the task returns `completed`.
 - Failed, expired, canceled, or non-completed tasks are not charged.
 - Internal model/tool usage is not exposed as continuous caller billing on this A2A path.

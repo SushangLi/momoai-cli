@@ -23,23 +23,14 @@ function remoteServiceUrl(agentId?: number, agent?: ResolvedAgentConfig) {
   return `${config.apiUrl}/a2a/agents/${id}`;
 }
 
-function renderCapabilities(capabilities: AgentCapability[], mode: AgentMode) {
+function renderCapabilities(capabilities: AgentCapability[]) {
   return capabilities
     .filter((capability) => capability.enabled !== false)
     .map((capability) => ({
       id: capability.id,
       name: capability.name,
       description: capability.description,
-      billing: mode === 'remote_service'
-        ? {
-            mode: 'fixed_result',
-            fixed_tokens: Number(capability.fixedTokens || 0),
-            charged_when: 'task_completed'
-          }
-        : {
-            mode: 'local',
-            charged_when: 'no_cli_agent_fee'
-          }
+      tags: ['momoai', 'agent']
     }));
 }
 
@@ -50,7 +41,7 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
   const url = mode === 'remote_service'
     ? remoteServiceUrl(options.agentId, options.agent)
     : localA2aUrl(options.localBaseUrl, options.agent);
-  const skills = renderCapabilities(agent.capabilities, mode);
+  const skills = renderCapabilities(agent.capabilities);
   return {
     name: agent.name,
     description: agent.description,

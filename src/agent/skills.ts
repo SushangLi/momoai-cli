@@ -58,10 +58,39 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 - Do not publish a public listing before an online provider node exists.
 - Do not invent capability ids or fixed token prices. Ask the user when missing.
 - Each enabled capability must have positive fixedTokens.
+- Keep pricing in MOMOAI listing/provider registration or a MOMOAI market adapter record, not in generic A2A communication requirements.
 - One machine can host multiple profiles. Each running provider process is tied to one profile and one platform agent id.
 - Polling providers route by agent id and do not require public inbound ports.
 - CLI HTTP providers require distinct local host/port values and distinct provider_url values when multiple local services run at once.
 - External providers own their own protocol and port; use the CLI only to register, publish, and update them.`;
+
+const fallbackOpenClawA2aPublishingSkill = `# OpenClaw A2A Publishing Skill
+
+Use this when the user wants to publish a local OpenClaw agent on MOMOAI through A2A.
+
+## Core Rule
+
+Do not modify OpenClaw's official source code and do not use momoai-cli as the runtime proxy for OpenClaw. Split the work into two plugins:
+
+- A public standard A2A OpenClaw plugin owns generic A2A communication and the standard Agent Card.
+- The MOMOAI A2A adapter plugin owns market metadata, platform invocation checks, and the protected provider URL used by momoai.pro.
+
+## Workflow
+
+1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, public provider URL, standard A2A plugin source, and priced MOMOAI capabilities.
+2. Probe the local port, usually http://127.0.0.1:18789, for /.well-known/agent-card.json and the A2A JSON-RPC endpoint.
+3. If standard A2A is missing, use prepare_openclaw_a2a_market_service or "$agent openclaw install-a2a" to install the public standard A2A plugin source. If the user already manages that plugin, set skip_standard_plugin.
+4. Install/configure the MOMOAI adapter plugin. It must use a protected_path that differs from the standard upstream_path.
+5. Restart OpenClaw Gateway after plugin changes, or run with --restart.
+6. Publish/update the MOMOAI listing with provider_runtime external and provider_url set to the public MOMOAI protected provider endpoint, not the raw local CLI.
+7. Only make the listing public after the standard A2A endpoint and protected provider endpoint are reachable from momoai.pro.
+
+## Notes
+
+- Without a standard A2A plugin, OpenClaw 18789 may return 404 for /.well-known/agent-card.json and HTML or 404 for /a2a.
+- Generic A2A skills should not contain MOMOAI pricing. FixedTokens belong to MOMOAI listing/provider registration and the MOMOAI adapter market card.
+- Keep platform JWT auth enabled for public services. Use --allow-unauthenticated only for local protocol testing.
+- Multiple OpenClaw services can coexist by using different profiles and distinct upstream/protected paths.`;
 
 function readFirstExisting(paths: string[], fallback: string) {
   for (const path of paths) {
@@ -86,4 +115,12 @@ export function loadRemoteServicePublishingSkill() {
     join(here, 'skills', 'remote-service-publishing', 'SKILL.md'),
     join(process.cwd(), 'src', 'agent', 'skills', 'remote-service-publishing', 'SKILL.md')
   ], fallbackRemoteServicePublishingSkill).trim();
+}
+
+export function loadOpenClawA2aPublishingSkill() {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return readFirstExisting([
+    join(here, 'skills', 'openclaw-a2a-publishing', 'SKILL.md'),
+    join(process.cwd(), 'src', 'agent', 'skills', 'openclaw-a2a-publishing', 'SKILL.md')
+  ], fallbackOpenClawA2aPublishingSkill).trim();
 }

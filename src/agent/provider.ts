@@ -48,6 +48,19 @@ function providerEndpoint(agent: ResolvedAgentConfig, allowLocalFallback: boolea
   throw new Error('HTTP remote service requires --provider-url <https://.../a2a> so momoai.pro can reach this local provider.');
 }
 
+function marketCapabilities(agent: ResolvedAgentConfig) {
+  return agent.capabilities
+    .filter((capability) => capability.enabled !== false)
+    .map((capability, index) => ({
+      id: capability.id,
+      name: capability.name,
+      description: capability.description || '',
+      fixedTokens: Number(capability.fixedTokens || 0),
+      enabled: capability.enabled !== false,
+      sortOrder: index
+    }));
+}
+
 function textFromA2aMessage(message: any) {
   if (typeof message?.content === 'string') return message.content;
   const parts = Array.isArray(message?.parts) ? message.parts : [];
@@ -79,6 +92,7 @@ async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: 
   if (!agentId) throw new Error('Remote service provider requires an agent id.');
   const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
   const oasf = buildOasfRecord({ mode: 'remote_service', agentId, agent });
+  const capabilities = marketCapabilities(agent);
   const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
     body: {
       agent_id: agentId,
@@ -86,7 +100,8 @@ async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: 
       ...(agent.serviceType === 'http' ? { provider_url: providerEndpoint(agent, allowLocalFallback) } : {}),
       card,
       oasf,
-      capabilities: card.skills
+      capabilities,
+      market_capabilities: capabilities
     }
   });
 

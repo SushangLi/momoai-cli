@@ -4,7 +4,7 @@ import { modelAgentId } from '../model.js';
 import { executeToolCall, momoTools } from '../tools.js';
 import type { ConfirmTool } from '../tools.js';
 import { AgentMemory } from './memory.js';
-import { loadMarketTradingSkill, loadRemoteServicePublishingSkill } from './skills.js';
+import { loadMarketTradingSkill, loadOpenClawA2aPublishingSkill, loadRemoteServicePublishingSkill } from './skills.js';
 import { estimateTokens, makeId } from './token.js';
 import type { AgentRunInput, AgentRunResult } from './types.js';
 
@@ -50,7 +50,7 @@ export class AgentRuntime {
     return undefined;
   }
 
-  private async createPlan(input: AgentRunInput, summary: string, index: string, marketTradingSkill: string, remoteServicePublishingSkill: string, authToken?: string) {
+  private async createPlan(input: AgentRunInput, summary: string, index: string, marketTradingSkill: string, remoteServicePublishingSkill: string, openClawA2aPublishingSkill: string, authToken?: string) {
     const config = loadConfig();
     const response = await new MomoClient().request<any>('/v1/chat/completions', {
       authToken,
@@ -69,7 +69,10 @@ export class AgentRuntime {
               marketTradingSkill,
               '',
               'MOMOAI remote service publishing skill:',
-              remoteServicePublishingSkill
+              remoteServicePublishingSkill,
+              '',
+              'OpenClaw A2A publishing skill:',
+              openClawA2aPublishingSkill
             ].join('\n')
           },
           {
@@ -109,7 +112,8 @@ export class AgentRuntime {
     const modelAuthToken = this.modelAuthToken(input);
     const marketTradingSkill = loadMarketTradingSkill();
     const remoteServicePublishingSkill = loadRemoteServicePublishingSkill();
-    const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, remoteServicePublishingSkill, modelAuthToken);
+    const openClawA2aPublishingSkill = loadOpenClawA2aPublishingSkill();
+    const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, remoteServicePublishingSkill, openClawA2aPublishingSkill, modelAuthToken);
     addUsage(usage, plan.usage);
 
     const systemMessage = {
@@ -131,6 +135,9 @@ export class AgentRuntime {
         '',
         'MOMOAI remote service publishing skill:',
         remoteServicePublishingSkill,
+        '',
+        'OpenClaw A2A publishing skill:',
+        openClawA2aPublishingSkill,
         '',
         `Current plan id: ${plan.id}`,
         plan.text,

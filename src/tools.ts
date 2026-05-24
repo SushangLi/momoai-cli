@@ -1,4 +1,5 @@
 import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
+import { installOpenClawA2a } from './agent/openclaw.js';
 import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
 import type { AgentCapability, ResolvedAgentConfig } from './config.js';
 
@@ -167,6 +168,92 @@ export const momoTools = [
         }
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'prepare_openclaw_a2a_market_service',
+      description: 'Probe an OpenClaw/agent port, install a public standard A2A OpenClaw plugin when A2A is missing, then install the MOMOAI market adapter plugin. The CLI is not used as a runtime proxy.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          agent_id: { type: 'number', description: 'MOMOAI platform agent id, if already published.' },
+          provider_url: { type: 'string', description: 'Public URL for the MOMOAI protected provider endpoint.' },
+          gateway_base_url: { type: 'string', description: 'Local OpenClaw Gateway base URL, usually http://127.0.0.1:18789.' },
+          standard_plugin_source: { type: 'string', description: 'Public OpenClaw plugin source for standard A2A communication. Override this when an official source is available.' },
+          skip_standard_plugin: { type: 'boolean', default: false, description: 'Skip installing the standard A2A plugin when the port already supports A2A or the user manages it separately.' },
+          service_id: { type: 'string' },
+          upstream_path: { type: 'string', description: 'Standard A2A endpoint path owned by the public A2A plugin, for example /a2a/gomoku.' },
+          protected_path: { type: 'string', description: 'MOMOAI adapter endpoint path that verifies market invocation and forwards to upstream_path.' },
+          agent_card_path: { type: 'string' },
+          market_path: { type: 'string' },
+          oasf_path: { type: 'string' },
+          require_platform_auth: { type: 'boolean', default: true },
+          forward_authorization: { type: 'boolean', default: false },
+          restart: { type: 'boolean', default: false },
+          capabilities: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                fixedTokens: { type: 'number' },
+                enabled: { type: 'boolean' }
+              },
+              required: ['id', 'name', 'fixedTokens']
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'install_openclaw_a2a_plugin',
+      description: 'Backward-compatible alias for prepare_openclaw_a2a_market_service.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          agent_id: { type: 'number' },
+          provider_url: { type: 'string' },
+          gateway_base_url: { type: 'string' },
+          standard_plugin_source: { type: 'string' },
+          skip_standard_plugin: { type: 'boolean', default: false },
+          service_id: { type: 'string' },
+          upstream_path: { type: 'string' },
+          protected_path: { type: 'string' },
+          agent_card_path: { type: 'string' },
+          market_path: { type: 'string' },
+          oasf_path: { type: 'string' },
+          require_platform_auth: { type: 'boolean', default: true },
+          forward_authorization: { type: 'boolean', default: false },
+          restart: { type: 'boolean', default: false },
+          capabilities: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                fixedTokens: { type: 'number' },
+                enabled: { type: 'boolean' }
+              },
+              required: ['id', 'name', 'fixedTokens']
+            }
+          }
+        }
+      }
+    }
   }
 ];
 
@@ -192,7 +279,7 @@ function intArg(args: Record<string, unknown>, name: string) {
 }
 
 async function confirmIfNeeded(name: string, args: Record<string, unknown>, confirm?: ConfirmTool) {
-  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing';
+  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing' || name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service';
   if (!isTrade || loadConfig().permissionMode === 'full') return true;
   if (!confirm) return false;
   return confirm(name, args);
@@ -325,6 +412,34 @@ export async function executeToolCall(
       if (isDelisted !== undefined) agent.listing.isDelisted = isDelisted;
       saveToolAgent(agent);
       return listing;
+    }
+    if (name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service') {
+      const agent = {
+        ...agentForTool({
+          ...args,
+          service_type: 'http',
+          provider_runtime: 'external'
+        }),
+        providerRuntime: 'external' as const,
+        serviceType: 'http' as const
+      };
+      const result = await installOpenClawA2a(agent, {
+        gatewayBaseUrl: typeof args.gateway_base_url === 'string' ? args.gateway_base_url : undefined,
+        standardPluginSource: typeof args.standard_plugin_source === 'string' ? args.standard_plugin_source : undefined,
+        skipStandardPlugin: args.skip_standard_plugin === true,
+        serviceId: typeof args.service_id === 'string' ? args.service_id : undefined,
+        upstreamPath: typeof args.upstream_path === 'string' ? args.upstream_path : typeof args.path === 'string' ? args.path : undefined,
+        protectedPath: typeof args.protected_path === 'string' ? args.protected_path : undefined,
+        agentCardPath: typeof args.agent_card_path === 'string' ? args.agent_card_path : typeof args.card_path === 'string' ? args.card_path : undefined,
+        marketPath: typeof args.market_path === 'string' ? args.market_path : undefined,
+        oasfPath: typeof args.oasf_path === 'string' ? args.oasf_path : undefined,
+        providerUrl: agent.providerUrl,
+        requirePlatformAuth: args.require_platform_auth === undefined ? true : Boolean(args.require_platform_auth),
+        forwardAuthorization: args.forward_authorization === true,
+        restart: args.restart === true
+      });
+      saveToolAgent(agent);
+      return result;
     }
     return { error: `Unknown tool: ${name}` };
   } catch (error) {

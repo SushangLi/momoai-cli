@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { buildAgentCard, buildOasfRecord } from '../agent/card.js';
 import { sendA2aMessage } from '../agent/client.js';
+import { installOpenClawA2a } from '../agent/openclaw.js';
 import { runRemoteServiceProvider } from '../agent/provider.js';
 import { startAgentServer } from '../agent/server.js';
 import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
@@ -19,6 +20,7 @@ function usage() {
     '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
     '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>]',
     '  $agent connect [--profile <name>] [--agent-id <id>] [--service polling|http] [--provider-runtime cli|external] [--provider-url <url>]',
+    '  $agent openclaw install-a2a [--profile <name>] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent oasf [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--context <id>] [--show-plan] [--json]'
@@ -293,6 +295,57 @@ export async function agentCommand(command: ParsedCommand) {
     return;
   }
 
+  if (action === 'openclaw') {
+    const [openclawAction] = args;
+    if (openclawAction !== 'install-a2a') usage();
+    const agent = {
+      ...agentWithFlags(config, command),
+      mode: 'remote_service' as AgentMode,
+      serviceType: 'http' as AgentServiceType,
+      providerRuntime: 'external' as AgentProviderRuntime
+    };
+    validateBillableCapabilities(agent);
+    const result = await installOpenClawA2a(agent, {
+      openclawBin: flagString(command.flags, 'openclaw-bin') || flagString(command.flags, 'openclaw_bin'),
+      gatewayBaseUrl: flagString(command.flags, 'gateway-base-url') || flagString(command.flags, 'gateway_base_url') || flagString(command.flags, 'base-url') || flagString(command.flags, 'base_url'),
+      standardPluginSource:
+        flagString(command.flags, 'standard-plugin-source') ||
+        flagString(command.flags, 'standard_plugin_source') ||
+        flagString(command.flags, 'official-a2a-plugin-source') ||
+        flagString(command.flags, 'official_a2a_plugin_source') ||
+        flagString(command.flags, 'a2a-plugin-source') ||
+        flagString(command.flags, 'a2a_plugin_source'),
+      skipStandardPlugin: command.flags['skip-standard-plugin'] === true || command.flags.skip_standard_plugin === true,
+      serviceId: flagString(command.flags, 'service-id') || flagString(command.flags, 'service_id') || agent.profile,
+      upstreamPath: flagString(command.flags, 'upstream-path') || flagString(command.flags, 'upstream_path') || flagString(command.flags, 'path'),
+      protectedPath: flagString(command.flags, 'protected-path') || flagString(command.flags, 'protected_path'),
+      agentCardPath: flagString(command.flags, 'agent-card-path') || flagString(command.flags, 'agent_card_path') || flagString(command.flags, 'card-path') || flagString(command.flags, 'card_path'),
+      marketPath: flagString(command.flags, 'market-path') || flagString(command.flags, 'market_path'),
+      oasfPath: flagString(command.flags, 'oasf-path') || flagString(command.flags, 'oasf_path'),
+      providerUrl: agent.providerUrl,
+      requirePlatformAuth: command.flags['allow-unauthenticated'] === true || command.flags.allow_unauthenticated === true ? false : true,
+      forwardAuthorization: command.flags['forward-authorization'] === true || command.flags.forward_authorization === true,
+      restart: command.flags.restart === true
+    });
+    const savedAgent = {
+      ...agent,
+      ...(agent.providerUrl ? { providerUrl: agent.providerUrl } : {})
+    };
+    saveAgentProfile(savedAgent.profile, profileUpdateFromAgent(savedAgent, command));
+    console.log('OpenClaw A2A stack prepared.');
+    console.log(`profile: ${agent.profile}`);
+    console.log(`openclaw service: ${result.serviceId}`);
+    console.log(`standard plugin source: ${result.standardPluginSource}`);
+    console.log(`standard plugin installed: ${result.standardPluginInstalled ? 'yes' : 'no'}`);
+    console.log(`standard a2a endpoint: ${result.localStandardA2aUrl}`);
+    console.log(`momoai protected provider endpoint: ${result.localProtectedProviderUrl}`);
+    console.log(`standard agent card: ${result.localAgentCardUrl}`);
+    console.log(`momoai market card: ${result.localMarketCardUrl}`);
+    if (agent.providerUrl) console.log(`registered provider url in profile: ${agent.providerUrl}`);
+    if (!result.restarted) console.log('next: restart OpenClaw Gateway or run again with --restart.');
+    return;
+  }
+
   if (action === 'card') {
     const agent = agentWithFlags(config, command);
     const card = buildAgentCard({
@@ -330,7 +383,8 @@ export async function agentCommand(command: ParsedCommand) {
       showPlan: command.flags['show-plan'] === true || command.flags.showPlan === true
     });
     if (command.flags.json) return printJson(result);
-    const message = (result as any)?.status?.message;
+    const payload = result as any;
+    const message = payload?.kind === 'message' ? payload : payload?.status?.message;
     const text = Array.isArray(message?.parts)
       ? message.parts.map((part: any) => part.text).filter(Boolean).join('\n')
       : JSON.stringify(result, null, 2);

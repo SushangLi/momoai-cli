@@ -36,14 +36,15 @@ const rules: Record<string, Rule> = {
     flags: ['--json']
   },
   agent: {
-    subcommands: ['profile', 'publish', 'update-listing', 'serve', 'connect', 'card', 'oasf', 'call'],
-    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--context', '--show-plan', '--json'],
+    subcommands: ['profile', 'publish', 'update-listing', 'serve', 'connect', 'openclaw', 'card', 'oasf', 'call'],
+    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--context', '--show-plan', '--gateway-base-url', '--standard-plugin-source', '--official-a2a-plugin-source', '--skip-standard-plugin', '--upstream-path', '--protected-path', '--agent-card-path', '--market-path', '--path', '--card-path', '--oasf-path', '--service-id', '--allow-unauthenticated', '--forward-authorization', '--restart', '--json'],
     subcommandFlags: {
       profile: ['--name', '--description', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file'],
       publish: ['--profile', '--name', '--description', '--service', '--provider-runtime', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
       'update-listing': ['--profile', '--agent-id', '--public', '--delisted', '--name', '--description', '--service', '--provider-runtime', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
       serve: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url'],
       connect: ['--profile', '--agent-id', '--service', '--provider-runtime', '--provider-url'],
+      openclaw: ['--profile', '--agent-id', '--provider-url', '--name', '--description', '--capabilities', '--capabilities-file', '--gateway-base-url', '--standard-plugin-source', '--official-a2a-plugin-source', '--skip-standard-plugin', '--upstream-path', '--protected-path', '--agent-card-path', '--market-path', '--path', '--card-path', '--oasf-path', '--service-id', '--allow-unauthenticated', '--forward-authorization', '--restart'],
       card: ['--profile', '--mode', '--agent-id', '--json'],
       oasf: ['--profile', '--mode', '--agent-id', '--json'],
       call: ['--auth', '--capability', '--context', '--show-plan', '--json']
