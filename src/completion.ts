@@ -6,7 +6,7 @@ type Rule = {
   subcommandFlags?: Record<string, string[]>;
 };
 
-const commands = ['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'help', 'quit'];
+const commands = ['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit'];
 
 const rules: Record<string, Rule> = {
   register: {
@@ -34,6 +34,17 @@ const rules: Record<string, Rule> = {
   },
   run: {
     flags: ['--json']
+  },
+  agent: {
+    subcommands: ['serve', 'connect', 'card', 'oasf', 'call'],
+    flags: ['--mode', '--host', '--port', '--agent-id', '--auth', '--capability', '--context', '--show-plan', '--json'],
+    subcommandFlags: {
+      serve: ['--mode', '--host', '--port', '--agent-id'],
+      connect: ['--agent-id'],
+      card: ['--mode', '--agent-id', '--json'],
+      oasf: ['--mode', '--agent-id', '--json'],
+      call: ['--auth', '--capability', '--context', '--show-plan', '--json']
+    }
   },
   config: {
     subcommands: ['show', 'reset'],

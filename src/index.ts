@@ -12,12 +12,13 @@ import { runCommand } from './commands/run.js';
 import { configCommand } from './commands/config.js';
 import { modelCommand } from './commands/model.js';
 import { permissionCommand } from './commands/permission.js';
+import { agentCommand } from './commands/agent.js';
 import { completer } from './completion.js';
 import { sendChat } from './chat.js';
 import { loadConfig } from './config.js';
 import type { ConfirmTool } from './tools.js';
 
-const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'help', 'quit']);
+const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit']);
 
 function help() {
   console.log(`Commands:
@@ -31,6 +32,7 @@ function help() {
   $model [model]
   $permission part|full
   $run <agent_id> [--json]
+  $agent serve|card|oasf|call ...
   $config show
   $config reset key
   $quit
@@ -54,6 +56,8 @@ async function dispatch(command: ParsedCommand) {
       return modelCommand(command);
     case 'permission':
       return permissionCommand(command);
+    case 'agent':
+      return agentCommand(command);
     case 'help':
       return help();
     case 'quit':

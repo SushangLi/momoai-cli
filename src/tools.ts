@@ -1,5 +1,5 @@
 import { loadConfig } from './config.js';
-import { exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents } from './services.js';
+import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents } from './services.js';
 
 export type ConfirmTool = (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 
@@ -79,6 +79,21 @@ export const momoTools = [
         required: ['agent_id', 'tokens', 'price']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'call_platform_agent',
+      description: 'Call another MOMOAI market agent. During remote service execution, the original caller pays for this child agent call.',
+      parameters: {
+        type: 'object',
+        properties: {
+          agent_id: { type: 'number' },
+          content: { type: 'string' }
+        },
+        required: ['agent_id', 'content']
+      }
+    }
   }
 ];
 
@@ -110,7 +125,18 @@ async function confirmIfNeeded(name: string, args: Record<string, unknown>, conf
   return confirm(name, args);
 }
 
-export async function executeToolCall(name: string, rawArgs: string | undefined, confirm?: ConfirmTool) {
+export async function executeToolCall(
+  name: string,
+  rawArgs: string | undefined,
+  confirm?: ConfirmTool,
+  options: { planId?: string; authToken?: string } = {}
+) {
+  if (!options.planId) {
+    return {
+      error: 'Tool call blocked: agent actions require an approved plan before execution.'
+    };
+  }
+
   const args = parseArgs(rawArgs);
   const allowed = await confirmIfNeeded(name, args, confirm);
   if (!allowed) {
@@ -122,19 +148,22 @@ export async function executeToolCall(name: string, rawArgs: string | undefined,
 
   try {
     if (name === 'explore_agents') {
-      return await exploreAgents(String(args.query || ''), Number(args.limit || 10));
+      return await exploreAgents(String(args.query || ''), Number(args.limit || 10), options.authToken);
     }
-    if (name === 'exchange_balance') return await exchangeBalance();
-    if (name === 'exchange_owned') return await exchangeOwned();
+    if (name === 'exchange_balance') return await exchangeBalance(options.authToken);
+    if (name === 'exchange_owned') return await exchangeOwned(options.authToken);
     if (name === 'exchange_listings') {
       const agentId = args.agent_id === undefined ? undefined : intArg(args, 'agent_id');
-      return await exchangeListings(agentId);
+      return await exchangeListings(agentId, options.authToken);
     }
     if (name === 'exchange_buy') {
-      return await exchangeBuy(intArg(args, 'agent_id'), numberArg(args, 'tokens'), numberArg(args, 'max_price'));
+      return await exchangeBuy(intArg(args, 'agent_id'), numberArg(args, 'tokens'), numberArg(args, 'max_price'), options.authToken);
     }
     if (name === 'exchange_sell') {
-      return await exchangeSell(intArg(args, 'agent_id'), numberArg(args, 'tokens'), numberArg(args, 'price'));
+      return await exchangeSell(intArg(args, 'agent_id'), numberArg(args, 'tokens'), numberArg(args, 'price'), options.authToken);
+    }
+    if (name === 'call_platform_agent') {
+      return await callPlatformAgent(intArg(args, 'agent_id'), String(args.content || ''), options.authToken);
     }
     return { error: `Unknown tool: ${name}` };
   } catch (error) {

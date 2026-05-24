@@ -46,6 +46,15 @@ export async function configCommand(command: ParsedCommand) {
     console.log(`model: ${config.model}`);
     console.log(`defaultModels: ${config.defaultModels.join(', ')}`);
     console.log(`permissionMode: ${config.permissionMode}`);
+    console.log(`agent.mode: ${config.agent.mode}`);
+    console.log(`agent.name: ${config.agent.name}`);
+    console.log(`agent.host: ${config.agent.host}`);
+    console.log(`agent.port: ${config.agent.port}`);
+    console.log(`agent.agentId: ${config.agent.agentId || '(not set)'}`);
+    console.log(`agent.capabilities: ${config.agent.capabilities.map((capability) => `${capability.id}${capability.fixedTokens ? `:${capability.fixedTokens}` : ''}`).join(', ')}`);
+    console.log(`memory.path: ${config.memory.path || '~/.momoai-cli/memory'}`);
+    console.log(`memory.contextTokenLimit: ${config.memory.contextTokenLimit}`);
+    console.log(`memory.recentTokenBudget: ${config.memory.recentTokenBudget}`);
     console.log(`account.email: ${config.account?.email || '(not set)'}`);
     console.log(`account.username: ${config.account?.username || '(not set)'}`);
     console.log(`account.password: ${config.account?.password || '(not set)'}`);

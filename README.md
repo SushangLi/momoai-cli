@@ -8,7 +8,7 @@ Text entered without `$` is sent to the selected model as an OpenAI-compatible c
 ## Requirements
 
 - Node.js 18+
-- A reachable MOMO AI platform URL, default: `https://hub.momoai.pro`
+- A reachable MOMO AI platform URL, default: `https://momoai.pro`
 
 ## Install From Source
 
@@ -67,6 +67,15 @@ Get OpenAI-compatible run information:
 ```text
 momoai> $run 237
 ```
+
+Start this CLI as a local A2A agent:
+
+```text
+momoai> $agent serve --host 127.0.0.1 --port 41241
+```
+
+Local mode is the default. It does not charge a CLI agent fee and does not require a platform invocation JWT.
+Expose `/.well-known/agent-card.json` and `/.well-known/oasf-record.json` from the same host when another local agent needs to discover it.
 
 Choose the chat model:
 
@@ -257,11 +266,40 @@ momoai> $run 237
 Example output:
 
 ```bash
-curl -X POST "https://hub.momoai.pro/api/agent-proxy" \
+curl -X POST "https://momoai.pro/api/agent-proxy" \
   -H "Authorization: Bearer momo_..." \
   -H "Content-Type: application/json" \
   -d '{"model":"237","messages":[{"role":"user","content":"Hello"}]}'
 ```
+
+### `$agent serve|connect|card|oasf|call`
+
+Runs this CLI as an A2A-capable agent, connects it as a remote service provider, prints capability metadata, or calls another A2A agent.
+
+```text
+momoai> $agent serve --host 127.0.0.1 --port 41241
+momoai> $agent connect --agent-id 237
+momoai> $agent serve --mode remote_service --agent-id 237
+momoai> $agent card --json
+momoai> $agent card --mode remote_service --agent-id 237 --json
+momoai> $agent oasf --json
+momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability general_task
+```
+
+Local mode is the default for distributed CLI installs. It exposes A2A/OASF capability metadata but does not charge a CLI agent fee; the user's local MOMO key still pays for model calls and any child agents the CLI invokes.
+
+Remote service mode is for agents listed on MOMOAI and provided from the owner's local or private machine. The CLI registers its capability card with the platform, polls the relay for tasks, expects platform-issued invocation JWTs, requires `metadata.capability_id`, and exposes fixed-result capability prices in the agent card. Configure providers with:
+
+```bash
+MOMOAI_API_URL=https://momoai.pro
+MOMOAI_AGENT_MODE=remote_service
+MOMOAI_AGENT_ID=<agent_id>
+MOMOAI_AGENT_CAPABILITIES='[{"id":"general_task","name":"General task","description":"Complete one CLI task","fixedTokens":1000,"enabled":true}]'
+```
+
+For local shared-secret relay development only, set `MOMOAI_INVOCATION_JWT_SECRET` to match the platform. In remote service mode, successful A2A task completion is billed by the platform using the selected capability's fixed token amount; failed or non-completed tasks are not billed.
+
+Conversation memory is stored under `~/.momoai-cli/memory` by default. It keeps detailed Markdown transcripts plus abstract summaries and compresses context when the approximate token count reaches 200,000.
 
 ## Tab Completion
 
@@ -291,7 +329,7 @@ MOMOAI CLI 是 MOMO AI 的交互式命令行工具。CLI 内部命令都以 `$` 
 ## 环境要求
 
 - Node.js 18+
-- 可访问的 MOMO AI 平台地址，默认是：`https://hub.momoai.pro`
+- 可访问的 MOMO AI 平台地址，默认是：`https://momoai.pro`
 
 ## 从源码安装
 
@@ -540,11 +578,40 @@ momoai> $run 237
 示例输出：
 
 ```bash
-curl -X POST "https://hub.momoai.pro/api/agent-proxy" \
+curl -X POST "https://momoai.pro/api/agent-proxy" \
   -H "Authorization: Bearer momo_..." \
   -H "Content-Type: application/json" \
   -d '{"model":"237","messages":[{"role":"user","content":"Hello"}]}'
 ```
+
+### `$agent serve|connect|card|oasf|call`
+
+把本 CLI 作为支持 A2A 的智能体运行，连接为远程服务提供方，或输出能力元数据、调用其他 A2A 智能体。
+
+```text
+momoai> $agent serve --host 127.0.0.1 --port 41241
+momoai> $agent connect --agent-id 237
+momoai> $agent serve --mode remote_service --agent-id 237
+momoai> $agent card --json
+momoai> $agent card --mode remote_service --agent-id 237 --json
+momoai> $agent oasf --json
+momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability general_task
+```
+
+分发给用户本地安装时，默认是 local 模式：暴露 A2A/OASF 能力元数据，但不收取 CLI 自身的 agent 费用；内置模型调用和可能调用的其他智能体仍由本地 MOMO key 支付。
+
+上架交易时使用 remote_service 模式：CLI 在本地或私有机器注册能力卡片并轮询平台 relay，任务只接受平台签发的短期 invocation JWT，调用必须带 `metadata.capability_id`，能力卡片会暴露每个能力的固定结果 token 价格。服务提供方建议配置：
+
+```bash
+MOMOAI_API_URL=https://momoai.pro
+MOMOAI_AGENT_MODE=remote_service
+MOMOAI_AGENT_ID=<agent_id>
+MOMOAI_AGENT_CAPABILITIES='[{"id":"general_task","name":"General task","description":"Complete one CLI task","fixedTokens":1000,"enabled":true}]'
+```
+
+本地调试 relay 鉴权可使用 `MOMOAI_INVOCATION_JWT_SECRET`，并保持它与平台一致。远程服务模式下，平台只在 A2A 任务成功完成后按所选能力的固定 token 扣费；失败或未 completed 的任务不扣费。
+
+默认记忆位置是 `~/.momoai-cli/memory`。系统会保存详细 Markdown 记录和抽象摘要，近似上下文达到 200,000 tokens 时自动压缩。
 
 ## Tab 补全
 
