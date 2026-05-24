@@ -37,13 +37,13 @@ const rules: Record<string, Rule> = {
   },
   agent: {
     subcommands: ['profile', 'publish', 'update-listing', 'serve', 'connect', 'card', 'oasf', 'call'],
-    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--context', '--show-plan', '--json'],
+    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-url', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--context', '--show-plan', '--json'],
     subcommandFlags: {
-      profile: ['--name', '--description', '--host', '--port', '--agent-id', '--price', '--available-tokens', '--capabilities', '--capabilities-file'],
-      publish: ['--profile', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
-      'update-listing': ['--profile', '--agent-id', '--public', '--delisted', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
-      serve: ['--profile', '--mode', '--host', '--port', '--agent-id'],
-      connect: ['--profile', '--agent-id'],
+      profile: ['--name', '--description', '--host', '--port', '--agent-id', '--service', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file'],
+      publish: ['--profile', '--name', '--description', '--service', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
+      'update-listing': ['--profile', '--agent-id', '--public', '--delisted', '--name', '--description', '--service', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
+      serve: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-url'],
+      connect: ['--profile', '--agent-id', '--service', '--provider-url'],
       card: ['--profile', '--mode', '--agent-id', '--json'],
       oasf: ['--profile', '--mode', '--agent-id', '--json'],
       call: ['--auth', '--capability', '--context', '--show-plan', '--json']

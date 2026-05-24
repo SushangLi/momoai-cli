@@ -4,7 +4,7 @@ import { modelAgentId } from '../model.js';
 import { executeToolCall, momoTools } from '../tools.js';
 import type { ConfirmTool } from '../tools.js';
 import { AgentMemory } from './memory.js';
-import { loadMarketTradingSkill } from './skills.js';
+import { loadMarketTradingSkill, loadRemoteServicePublishingSkill } from './skills.js';
 import { estimateTokens, makeId } from './token.js';
 import type { AgentRunInput, AgentRunResult } from './types.js';
 
@@ -50,7 +50,7 @@ export class AgentRuntime {
     return undefined;
   }
 
-  private async createPlan(input: AgentRunInput, summary: string, index: string, marketTradingSkill: string, authToken?: string) {
+  private async createPlan(input: AgentRunInput, summary: string, index: string, marketTradingSkill: string, remoteServicePublishingSkill: string, authToken?: string) {
     const config = loadConfig();
     const response = await new MomoClient().request<any>('/v1/chat/completions', {
       authToken,
@@ -66,7 +66,10 @@ export class AgentRuntime {
               'Include whether external tools or child agents are likely needed.',
               '',
               'MOMOAI market trading skill:',
-              marketTradingSkill
+              marketTradingSkill,
+              '',
+              'MOMOAI remote service publishing skill:',
+              remoteServicePublishingSkill
             ].join('\n')
           },
           {
@@ -105,7 +108,8 @@ export class AgentRuntime {
     const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
     const modelAuthToken = this.modelAuthToken(input);
     const marketTradingSkill = loadMarketTradingSkill();
-    const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, modelAuthToken);
+    const remoteServicePublishingSkill = loadRemoteServicePublishingSkill();
+    const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, remoteServicePublishingSkill, modelAuthToken);
     addUsage(usage, plan.usage);
 
     const systemMessage = {
@@ -124,6 +128,9 @@ export class AgentRuntime {
         '',
         'MOMOAI market trading skill:',
         marketTradingSkill,
+        '',
+        'MOMOAI remote service publishing skill:',
+        remoteServicePublishingSkill,
         '',
         `Current plan id: ${plan.id}`,
         plan.text,

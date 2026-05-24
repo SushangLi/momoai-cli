@@ -71,7 +71,7 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
               type: 'http',
               scheme: 'bearer',
               bearerFormat: 'JWT',
-              description: 'Short-lived MOMOAI platform invocation JWT. Remote service calls must be routed through the platform relay.'
+              description: 'Short-lived MOMOAI platform invocation JWT. Remote service calls must be authorized and routed by the MOMOAI platform gateway.'
             }
           },
           security: [{ platformInvocationJwt: [] }]

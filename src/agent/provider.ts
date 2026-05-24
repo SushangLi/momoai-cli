@@ -3,6 +3,7 @@ import { loadConfig } from '../config.js';
 import { buildAgentCard, buildOasfRecord } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
+import { startAgentServer } from './server.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
 import type { ResolvedAgentConfig } from '../config.js';
 
@@ -11,6 +12,8 @@ interface ProviderRegistration {
   node_id: string;
   session_id: string;
   poll_interval_ms?: number;
+  service_type?: string;
+  endpoint_url?: string;
 }
 
 interface RelayTask {
@@ -21,6 +24,25 @@ interface RelayTask {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function localA2aEndpoint(agent: ResolvedAgentConfig) {
+  return `http://${agent.host}:${agent.port}/a2a`;
+}
+
+function isLocalPlatformUrl(apiUrl: string) {
+  try {
+    const host = new URL(apiUrl).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+function providerEndpoint(agent: ResolvedAgentConfig, allowLocalFallback: boolean) {
+  if (agent.providerUrl) return agent.providerUrl.replace(/\/$/, '');
+  if (allowLocalFallback) return localA2aEndpoint(agent);
+  throw new Error('HTTP remote service requires --provider-url <https://.../a2a> so momoai.pro can reach this local provider.');
 }
 
 function textFromA2aMessage(message: any) {
@@ -49,7 +71,7 @@ function jsonRpcError(id: JsonRpcRequest['id'], code: number, message: string): 
   };
 }
 
-async function registerProvider(agent: ResolvedAgentConfig): Promise<ProviderRegistration> {
+async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: boolean): Promise<ProviderRegistration> {
   const agentId = agent.agentId;
   if (!agentId) throw new Error('Remote service provider requires an agent id.');
   const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
@@ -57,6 +79,8 @@ async function registerProvider(agent: ResolvedAgentConfig): Promise<ProviderReg
   const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
     body: {
       agent_id: agentId,
+      service_type: agent.serviceType,
+      ...(agent.serviceType === 'http' ? { provider_url: providerEndpoint(agent, allowLocalFallback) } : {}),
       card,
       oasf,
       capabilities: card.skills
@@ -144,12 +168,28 @@ async function executeRelayTask(task: RelayTask, agent: ResolvedAgentConfig): Pr
 export async function runRemoteServiceProvider(agent: ResolvedAgentConfig) {
   const config = loadConfig();
   if (!agent.agentId) throw new Error('Remote service provider requires an agent id.');
-  const registration = await registerProvider(agent);
-  const intervalMs = Number(registration.poll_interval_ms || 1500);
+  const allowLocalFallback = isLocalPlatformUrl(config.apiUrl);
+  const registration = await registerProvider(agent, allowLocalFallback);
   console.log(`MOMOAI remote service provider connected to ${config.apiUrl}`);
   console.log(`profile: ${agent.profile}`);
   console.log(`agent: ${agent.agentId}`);
   console.log(`node: ${registration.node_id}`);
+
+  if (agent.serviceType === 'http') {
+    const endpoint = providerEndpoint(agent, allowLocalFallback);
+    console.log('service: http');
+    console.log(`provider endpoint: ${endpoint}`);
+    if (!agent.providerUrl && allowLocalFallback) {
+      console.warn('providerUrl is not configured; using the local endpoint because MOMOAI_API_URL points to a local platform.');
+    }
+    console.log(`MOMOAI A2A agent server listening on http://${agent.host}:${agent.port}`);
+    await startAgentServer({ host: agent.host, port: agent.port, mode: 'remote_service', agent });
+    return;
+  }
+
+  const intervalMs = Number(registration.poll_interval_ms || 3_600_000);
+  console.log('service: polling');
+  console.log(`poll interval: ${Math.round(intervalMs / 1000)}s`);
 
   for (;;) {
     const task = await pollTask(registration);

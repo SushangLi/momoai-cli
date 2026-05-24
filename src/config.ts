@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 export type AgentMode = 'local' | 'remote_service';
+export type AgentServiceType = 'polling' | 'http';
 
 export interface AgentCapability {
   id: string;
@@ -20,6 +21,8 @@ export interface AgentListingConfig {
 
 export interface AgentInstanceConfig {
   mode?: AgentMode;
+  serviceType?: AgentServiceType;
+  providerUrl?: string;
   name?: string;
   description?: string;
   version?: string;
@@ -33,6 +36,8 @@ export interface AgentInstanceConfig {
 export interface ResolvedAgentConfig {
   profile: string;
   mode: AgentMode;
+  serviceType: AgentServiceType;
+  providerUrl?: string;
   name: string;
   description: string;
   version: string;
@@ -101,6 +106,7 @@ const defaultConfig: CliConfig = {
   permissionMode: 'part',
   agent: {
     mode: 'local',
+    serviceType: 'http',
     name: 'MOMOAI CLI Agent',
     description: 'A MOMOAI command-line agent with market tools, ReAct planning, A2A communication, and layered memory.',
     version: '0.1.0',
@@ -130,6 +136,12 @@ function normalizeAgentMode(value: unknown): AgentMode {
   if (value === undefined || value === null || value === '') return 'local';
   if (value === 'local' || value === 'remote_service') return value;
   throw new Error('Invalid agent mode. Use local or remote_service.');
+}
+
+export function normalizeAgentServiceType(value: unknown): AgentServiceType {
+  if (value === undefined || value === null || value === '') return 'http';
+  if (value === 'polling' || value === 'http') return value;
+  throw new Error('Invalid agent service type. Use polling or http.');
 }
 
 function normalizeAgentDescription(value: unknown): string | undefined {
@@ -193,6 +205,8 @@ function normalizeAgentInstance(value: unknown): AgentInstanceConfig {
   const agent = value && typeof value === 'object' ? value as AgentInstanceConfig : {};
   return {
     ...(agent.mode === undefined ? {} : { mode: normalizeAgentMode(agent.mode) }),
+    ...(agent.serviceType === undefined ? {} : { serviceType: normalizeAgentServiceType(agent.serviceType) }),
+    ...(typeof agent.providerUrl === 'string' && agent.providerUrl.trim() ? { providerUrl: agent.providerUrl.trim().replace(/\/$/, '') } : {}),
     ...(typeof agent.name === 'string' && agent.name.trim() ? { name: agent.name.trim() } : {}),
     ...(typeof agent.description === 'string' && agent.description.trim() ? { description: normalizeAgentDescription(agent.description) || agent.description.trim() } : {}),
     ...(typeof agent.version === 'string' && agent.version.trim() ? { version: agent.version.trim() } : {}),
@@ -229,6 +243,8 @@ function buildBaseAgent(storedAgent: Partial<CliConfig['agent']> | undefined): C
     ...defaultConfig.agent,
     ...(storedAgent || {}),
     mode: normalizeAgentMode(process.env.MOMOAI_AGENT_MODE || storedAgent?.mode || defaultConfig.agent.mode),
+    serviceType: normalizeAgentServiceType(process.env.MOMOAI_AGENT_SERVICE_TYPE || storedAgent?.serviceType || defaultConfig.agent.serviceType),
+    providerUrl: (process.env.MOMOAI_AGENT_PROVIDER_URL || storedAgent?.providerUrl || '').replace(/\/$/, '') || undefined,
     description: normalizeAgentDescription(storedAgent?.description) || defaultConfig.agent.description,
     host: process.env.MOMOAI_AGENT_HOST || storedAgent?.host || defaultConfig.agent.host,
     port: Number(process.env.MOMOAI_AGENT_PORT || storedAgent?.port || defaultConfig.agent.port),
@@ -299,6 +315,8 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
     ...defaultConfig.agent,
     ...(merged.agent || {}),
     mode: normalizeAgentMode(merged.agent?.mode),
+    serviceType: normalizeAgentServiceType(merged.agent?.serviceType),
+    providerUrl: merged.agent?.providerUrl?.replace(/\/$/, ''),
     capabilities: normalizeCapabilities(merged.agent?.capabilities),
     listing: normalizeListing(merged.agent?.listing)
   };
@@ -337,6 +355,8 @@ export function resolveAgentConfig(config: CliConfig, profileName?: string): Res
   return {
     profile: normalizedProfile,
     mode: normalizeAgentMode(profile.mode || base.mode),
+    serviceType: normalizeAgentServiceType(profile.serviceType || base.serviceType),
+    providerUrl: profile.providerUrl || base.providerUrl,
     name: profile.name || base.name,
     description: normalizeAgentDescription(profile.description) || base.description,
     version: profile.version || base.version,

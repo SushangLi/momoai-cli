@@ -1,4 +1,4 @@
-import { loadConfig, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
+import { loadConfig, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
 import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
 import type { AgentCapability, ResolvedAgentConfig } from './config.js';
 
@@ -109,6 +109,8 @@ export const momoTools = [
           description: { type: 'string' },
           price: { type: 'number', description: 'Credits per 1K agent tokens.' },
           available_tokens: { type: 'number' },
+          service_type: { type: 'string', enum: ['polling', 'http'], description: 'polling is delayed and safer; http is realtime and requires a reachable provider_url.' },
+          provider_url: { type: 'string', description: 'Public or tunneled URL ending in /a2a for http service_type.' },
           capabilities: {
             type: 'array',
             items: {
@@ -144,6 +146,8 @@ export const momoTools = [
           description: { type: 'string' },
           price: { type: 'number' },
           available_tokens: { type: 'number' },
+          service_type: { type: 'string', enum: ['polling', 'http'] },
+          provider_url: { type: 'string' },
           capabilities: {
             type: 'array',
             items: {
@@ -220,6 +224,8 @@ function agentForTool(args: Record<string, unknown>): ResolvedAgentConfig {
   return {
     ...agent,
     mode: 'remote_service',
+    serviceType: normalizeAgentServiceType(args.service_type || args.serviceType || agent.serviceType),
+    ...(args.provider_url || args.providerUrl ? { providerUrl: String(args.provider_url || args.providerUrl).trim().replace(/\/$/, '') } : {}),
     ...(args.name ? { name: String(args.name) } : {}),
     ...(args.description ? { description: String(args.description) } : {}),
     ...(args.agent_id ? { agentId: intArg(args, 'agent_id') } : {}),
@@ -240,6 +246,8 @@ function saveToolAgent(agent: ResolvedAgentConfig) {
     version: agent.version,
     host: agent.host,
     port: agent.port,
+    serviceType: agent.serviceType,
+    ...(agent.providerUrl ? { providerUrl: agent.providerUrl } : {}),
     agentId: agent.agentId,
     capabilities: agent.capabilities,
     listing: agent.listing

@@ -33,13 +33,41 @@ This agent is allowed to act as a MOMOAI market trading agent. Its goal is to gr
 - If permission mode blocks a trade, explain the intended trade and ask for approval or permission-mode change.
 - In remote service mode, child agent calls may create additional platform costs and should be justified by expected trading value.`;
 
-function readFirstExisting(paths: string[]) {
+const fallbackRemoteServicePublishingSkill = `# Remote Service Publishing Skill
+
+This agent can help the user publish, update, and run local CLI agent profiles as MOMOAI A2A remote services.
+
+## Tools
+
+- publish_local_agent_listing: Create a delisted A2A remote-service draft for a local profile.
+- update_local_agent_listing: Update the profile's listing, capabilities, price, and visibility.
+
+## Workflow
+
+1. Plan before acting. Identify the target profile, public name, capabilities, fixed result-token prices, and whether the service should stay delisted.
+2. Create or update a local profile with a clear name, description, capability list, and fixedTokens for every enabled capability.
+3. Publish with publish_local_agent_listing. This creates a delisted draft and stores the returned agent id in the profile.
+4. Use service_type http by default. HTTP is realtime and requires a reachable provider_url ending in /a2a. Choose polling only when the user explicitly wants delayed service without an inbound port; polling checks the platform about once per hour.
+5. Ask the user to run the provider with "$agent connect --profile <profile> --service <polling|http>" and keep that process online.
+6. Only publish publicly after the provider is online, using update_local_agent_listing with public=true.
+7. Explain that failed or non-completed tasks are not charged; completed tasks charge the fixed token amount for the selected capability.
+
+## Constraints
+
+- Do not publish a public listing before an online provider node exists.
+- Do not invent capability ids or fixed token prices. Ask the user when missing.
+- Each enabled capability must have positive fixedTokens.
+- One machine can host multiple profiles. Each running provider process is tied to one profile and one platform agent id.
+- Polling providers route by agent id and do not require public inbound ports.
+- HTTP providers require distinct local host/port values and distinct provider_url values when multiple local services run at once.`;
+
+function readFirstExisting(paths: string[], fallback: string) {
   for (const path of paths) {
     if (existsSync(path)) {
       return readFileSync(path, 'utf8');
     }
   }
-  return fallbackMarketTradingSkill;
+  return fallback;
 }
 
 export function loadMarketTradingSkill() {
@@ -47,5 +75,13 @@ export function loadMarketTradingSkill() {
   return readFirstExisting([
     join(here, 'skills', 'market-trading', 'SKILL.md'),
     join(process.cwd(), 'src', 'agent', 'skills', 'market-trading', 'SKILL.md')
-  ]).trim();
+  ], fallbackMarketTradingSkill).trim();
+}
+
+export function loadRemoteServicePublishingSkill() {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return readFirstExisting([
+    join(here, 'skills', 'remote-service-publishing', 'SKILL.md'),
+    join(process.cwd(), 'src', 'agent', 'skills', 'remote-service-publishing', 'SKILL.md')
+  ], fallbackRemoteServicePublishingSkill).trim();
 }

@@ -3,22 +3,22 @@ import { buildAgentCard, buildOasfRecord } from '../agent/card.js';
 import { sendA2aMessage } from '../agent/client.js';
 import { runRemoteServiceProvider } from '../agent/provider.js';
 import { startAgentServer } from '../agent/server.js';
-import { loadConfig, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
+import { loadConfig, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
 import { printJson, table } from '../format.js';
 import { flagNumber, flagString } from '../parser.js';
 import { publishLocalAgentListing, updateLocalAgentListing } from '../services.js';
 import type { ParsedCommand } from '../parser.js';
-import type { AgentCapability, AgentInstanceConfig, AgentMode, CliConfig, ResolvedAgentConfig } from '../config.js';
+import type { AgentCapability, AgentInstanceConfig, AgentMode, AgentServiceType, CliConfig, ResolvedAgentConfig } from '../config.js';
 
 function usage() {
   throw new Error([
     'Usage:',
     '  $agent profile list',
-    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
-    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>]',
-    '  $agent connect [--profile <name>] [--agent-id <id>]',
+    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service polling|http] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
+    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service polling|http] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service polling|http] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service polling|http] [--provider-url <url>]',
+    '  $agent connect [--profile <name>] [--agent-id <id>] [--service polling|http] [--provider-url <url>]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent oasf [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--context <id>] [--show-plan] [--json]'
@@ -31,6 +31,15 @@ function modeFlag(command: ParsedCommand, fallback: AgentMode): AgentMode {
     throw new Error('--mode must be local or remote_service');
   }
   return mode;
+}
+
+function serviceTypeFlag(command: ParsedCommand, fallback: AgentServiceType): AgentServiceType {
+  return normalizeAgentServiceType(
+    flagString(command.flags, 'service') ||
+      flagString(command.flags, 'service-type') ||
+      flagString(command.flags, 'service_type') ||
+      fallback
+  );
 }
 
 function agentIdFlag(command: ParsedCommand, fallback?: number) {
@@ -96,6 +105,8 @@ function agentWithFlags(config: CliConfig, command: ParsedCommand): ResolvedAgen
   const host = flagString(command.flags, 'host');
   const port = flagNumber(command.flags, 'port');
   const agentId = agentIdFlag(command, agent.agentId);
+  const serviceType = serviceTypeFlag(command, agent.serviceType);
+  const providerUrl = flagString(command.flags, 'provider-url') || flagString(command.flags, 'provider_url');
   const price = flagNumber(command.flags, 'price');
   const availableTokens = flagNumber(command.flags, 'available-tokens') ?? flagNumber(command.flags, 'available_tokens');
 
@@ -106,6 +117,8 @@ function agentWithFlags(config: CliConfig, command: ParsedCommand): ResolvedAgen
     ...(host ? { host } : {}),
     ...(port ? { port } : {}),
     ...(agentId ? { agentId } : {}),
+    serviceType,
+    ...(providerUrl ? { providerUrl: providerUrl.trim().replace(/\/$/, '') } : {}),
     ...(capabilities ? { capabilities } : {}),
     listing: {
       ...agent.listing,
@@ -123,6 +136,8 @@ function profileUpdateFromAgent(agent: ResolvedAgentConfig, command: ParsedComma
     version: agent.version,
     host: agent.host,
     port: agent.port,
+    serviceType: agent.serviceType,
+    ...(agent.providerUrl ? { providerUrl: agent.providerUrl } : {}),
     agentId: agent.agentId,
     capabilities: capabilities || agent.capabilities,
     listing: agent.listing
@@ -162,9 +177,11 @@ export async function agentCommand(command: ParsedCommand) {
       ].map((agent) => ({
         profile: agent.profile,
         agent: agent.agentId || '',
+        service: agent.serviceType,
         name: agent.name,
         host: agent.host,
         port: agent.port,
+        providerUrl: agent.providerUrl || '',
         price: agent.listing.price,
         delisted: agent.listing.isDelisted
       }));
