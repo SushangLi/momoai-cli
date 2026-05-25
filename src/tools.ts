@@ -123,7 +123,9 @@ export const momoTools = [
                 name: { type: 'string' },
                 description: { type: 'string' },
                 fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' }
+                enabled: { type: 'boolean' },
+                inputModes: { type: 'array', items: { type: 'string' } },
+                outputModes: { type: 'array', items: { type: 'string' } }
               },
               required: ['id', 'name', 'fixedTokens']
             }
@@ -161,7 +163,9 @@ export const momoTools = [
                 name: { type: 'string' },
                 description: { type: 'string' },
                 fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' }
+                enabled: { type: 'boolean' },
+                inputModes: { type: 'array', items: { type: 'string' } },
+                outputModes: { type: 'array', items: { type: 'string' } }
               },
               required: ['id', 'name', 'fixedTokens']
             }
@@ -192,7 +196,6 @@ export const momoTools = [
           protected_path: { type: 'string', description: 'MOMOAI adapter endpoint path that verifies market invocation and forwards to upstream_path.' },
           agent_card_path: { type: 'string' },
           market_path: { type: 'string' },
-          oasf_path: { type: 'string' },
           require_platform_auth: { type: 'boolean', default: true },
           forward_authorization: { type: 'boolean', default: false },
           restart: { type: 'boolean', default: false },
@@ -205,7 +208,9 @@ export const momoTools = [
                 name: { type: 'string' },
                 description: { type: 'string' },
                 fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' }
+                enabled: { type: 'boolean' },
+                inputModes: { type: 'array', items: { type: 'string' } },
+                outputModes: { type: 'array', items: { type: 'string' } }
               },
               required: ['id', 'name', 'fixedTokens']
             }
@@ -232,7 +237,6 @@ export const momoTools = [
           upstream_path: { type: 'string' },
           agent_card_path: { type: 'string' },
           market_path: { type: 'string' },
-          oasf_path: { type: 'string' },
           paths: { type: 'array', items: { type: 'string' }, description: 'Additional exact paths to expose. Do not expose the whole OpenClaw gateway.' },
           include_standard: { type: 'boolean', default: false, description: 'For OpenClaw, also expose the generic A2A endpoint and agent card, not only MOMOAI protected paths.' },
           disable: { type: 'boolean', default: false },
@@ -263,7 +267,6 @@ export const momoTools = [
           protected_path: { type: 'string' },
           agent_card_path: { type: 'string' },
           market_path: { type: 'string' },
-          oasf_path: { type: 'string' },
           require_platform_auth: { type: 'boolean', default: true },
           forward_authorization: { type: 'boolean', default: false },
           restart: { type: 'boolean', default: false },
@@ -276,7 +279,9 @@ export const momoTools = [
                 name: { type: 'string' },
                 description: { type: 'string' },
                 fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' }
+                enabled: { type: 'boolean' },
+                inputModes: { type: 'array', items: { type: 'string' } },
+                outputModes: { type: 'array', items: { type: 'string' } }
               },
               required: ['id', 'name', 'fixedTokens']
             }
@@ -323,10 +328,18 @@ function capabilitiesArg(value: unknown): AgentCapability[] | undefined {
     name: String(capability.name || capability.id || capability.capability_id || capability.capabilityId || '').trim(),
     description: String(capability.description || '').trim(),
     fixedTokens: Number(capability.fixedTokens ?? capability.fixed_tokens),
-    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled)
+    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
+    inputModes: modesArg(capability.inputModes || capability.input_modes),
+    outputModes: modesArg(capability.outputModes || capability.output_modes)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('capabilities must include at least one item');
   return capabilities;
+}
+
+function modesArg(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
+  return modes.length ? modes : undefined;
 }
 
 function agentForTool(args: Record<string, unknown>): ResolvedAgentConfig {

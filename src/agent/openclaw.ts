@@ -116,7 +116,9 @@ function marketCapabilityPayload(agent: ResolvedAgentConfig) {
       name: capability.name,
       description: capability.description || '',
       fixedTokens: Number(capability.fixedTokens || 1000),
-      enabled: capability.enabled !== false
+      enabled: capability.enabled !== false,
+      inputModes: capability.inputModes || ['text/plain', 'application/json'],
+      outputModes: capability.outputModes || ['text/plain']
     }));
 }
 
@@ -135,8 +137,8 @@ function standardA2aSkills(agent: ResolvedAgentConfig) {
       name: capability.name,
       description: capability.description || '',
       tags: ['momoai', 'openclaw'],
-      inputModes: ['text/plain'],
-      outputModes: ['text/plain']
+      inputModes: capability.inputModes || ['text/plain', 'application/json'],
+      outputModes: capability.outputModes || ['text/plain']
     }));
 }
 

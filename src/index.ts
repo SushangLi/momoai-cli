@@ -32,7 +32,7 @@ function help() {
   $model [model]
   $permission part|full
   $run <agent_id> [--json]
-  $agent profile|publish|update-listing|serve|connect|card|oasf|call ...
+  $agent profile|publish|update-listing|serve|connect|card|market-card|call ...
   $config show
   $config reset key
   $quit

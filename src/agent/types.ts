@@ -29,6 +29,21 @@ export interface A2aMessagePart {
   kind?: string;
   type?: string;
   text?: string;
+  data?: unknown;
+  raw?: unknown;
+  bytes?: string;
+  uri?: string;
+  url?: string;
+  mimeType?: string;
+  name?: string;
+  file?: {
+    bytes?: string;
+    uri?: string;
+    url?: string;
+    mimeType?: string;
+    name?: string;
+  };
+  metadata?: Record<string, unknown>;
 }
 
 export interface A2aMessage {

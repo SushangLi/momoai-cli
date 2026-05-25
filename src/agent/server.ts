@@ -1,9 +1,10 @@
 import express from 'express';
-import { buildAgentCard, buildOasfRecord } from './card.js';
+import { buildAgentCard, buildMarketCard, buildOasfRecord } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import type { InvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import { makeId } from './token.js';
+import { contentFromA2aMessage } from './message.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
 import { loadConfig, resolveAgentConfig, type AgentMode, type ResolvedAgentConfig } from '../config.js';
 
@@ -40,16 +41,6 @@ function jsonRpcError(id: JsonRpcRequest['id'], code: number, message: string, d
   };
 }
 
-function textFromA2aMessage(message: any) {
-  if (typeof message?.content === 'string') return message.content;
-  const parts = Array.isArray(message?.parts) ? message.parts : [];
-  const text = parts
-    .map((part: { text?: unknown }) => (typeof part?.text === 'string' ? part.text : ''))
-    .filter(Boolean)
-    .join('\n');
-  return text.trim();
-}
-
 function taskResult(task: StoredTask) {
   return {
     id: task.id,
@@ -68,9 +59,9 @@ function capabilityIdFromParams(params: any) {
 
 async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent: ResolvedAgentConfig, auth?: InvocationAuth) {
   const params = request.params || {};
-  const content = textFromA2aMessage(params.message);
+  const content = contentFromA2aMessage(params.message);
   if (!content) {
-    return jsonRpcError(request.id, -32602, 'message/send requires a text message');
+    return jsonRpcError(request.id, -32602, 'message/send requires at least one text, data, or file part');
   }
 
   const capabilityId = capabilityIdFromParams(params);
@@ -175,6 +166,10 @@ export async function startAgentServer(options: {
 
   app.get('/.well-known/oasf-record.json', (_request, response) => {
     response.json(buildOasfRecord({ mode: options.mode, agent }));
+  });
+
+  app.get('/.well-known/momoai-a2a/market-card.json', (_request, response) => {
+    response.json(buildMarketCard({ mode: options.mode, agent }));
   });
 
   app.post('/message:send', async (expressRequest, response) => {

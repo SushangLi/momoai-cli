@@ -24,6 +24,12 @@ function normalizeServiceType(value) {
   return value === 'funnel' ? 'funnel' : 'websocket';
 }
 
+function normalizeModes(value, fallback) {
+  if (!Array.isArray(value)) return fallback;
+  const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
+  return modes.length ? modes : fallback;
+}
+
 function normalizeCapability(value, index) {
   const capability = isRecord(value) ? value : {};
   const id = String(capability.id || capability.capability_id || capability.capabilityId || `capability_${index + 1}`).trim();
@@ -34,7 +40,9 @@ function normalizeCapability(value, index) {
     name,
     description: String(capability.description || '').trim(),
     fixedTokens: Number.isFinite(fixedTokens) && fixedTokens > 0 ? Math.floor(fixedTokens) : 1000,
-    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled)
+    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
+    inputModes: normalizeModes(capability.inputModes || capability.input_modes, ['text/plain', 'application/json']),
+    outputModes: normalizeModes(capability.outputModes || capability.output_modes, ['text/plain'])
   };
 }
 
@@ -219,7 +227,9 @@ function renderMarketCapabilities(service) {
       description: capability.description,
       fixedTokens: capability.fixedTokens,
       enabled: true,
-      sortOrder: index
+      sortOrder: index,
+      inputModes: capability.inputModes,
+      outputModes: capability.outputModes
     }));
 }
 

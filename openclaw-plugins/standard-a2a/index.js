@@ -17,6 +17,12 @@ function normalizeString(value, fallback) {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+function normalizeModes(value, fallback) {
+  if (!Array.isArray(value)) return fallback;
+  const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
+  return modes.length ? modes : fallback;
+}
+
 function normalizeSkill(value, index) {
   const skill = isRecord(value) ? value : {};
   const id = normalizeString(skill.id || skill.capability_id || skill.capabilityId, `skill_${index + 1}`);
@@ -25,8 +31,8 @@ function normalizeSkill(value, index) {
     name: normalizeString(skill.name, id),
     description: normalizeString(skill.description, ''),
     tags: Array.isArray(skill.tags) ? skill.tags.map(String) : [],
-    inputModes: Array.isArray(skill.inputModes) ? skill.inputModes.map(String) : ['text/plain'],
-    outputModes: Array.isArray(skill.outputModes) ? skill.outputModes.map(String) : ['text/plain']
+    inputModes: normalizeModes(skill.inputModes || skill.input_modes, ['text/plain', 'application/json']),
+    outputModes: normalizeModes(skill.outputModes || skill.output_modes, ['text/plain'])
   };
 }
 
@@ -37,7 +43,7 @@ function defaultSkills() {
       name: 'General task',
       description: 'Complete one standard A2A task through OpenClaw.',
       tags: ['openclaw'],
-      inputModes: ['text/plain'],
+      inputModes: ['text/plain', 'application/json'],
       outputModes: ['text/plain']
     }
   ];
@@ -114,13 +120,60 @@ function taskMessage(role, text, metadata = {}) {
   };
 }
 
-function textFromMessage(message) {
+function safeJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function decodeTextBytes(bytes, mimeType) {
+  const normalizedMime = String(mimeType || '').toLowerCase();
+  const canDecode =
+    normalizedMime.startsWith('text/') ||
+    normalizedMime.includes('json') ||
+    normalizedMime.includes('xml') ||
+    normalizedMime.includes('yaml');
+  if (!canDecode) return undefined;
+  try {
+    const buffer = Buffer.from(bytes, 'base64');
+    if (buffer.byteLength > 64 * 1024) return `[decoded text omitted: ${buffer.byteLength} bytes exceeds 65536]`;
+    return buffer.toString('utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function filePartToText(part) {
+  const file = isRecord(part?.file) ? part.file : part;
+  const name = normalizeString(file?.name, 'unnamed');
+  const mimeType = normalizeString(file?.mimeType, 'application/octet-stream');
+  const uri = normalizeString(file?.uri || file?.url, '');
+  if (uri) return `[file: ${name}; mimeType=${mimeType}; uri=${uri}]`;
+  const bytes = typeof file?.bytes === 'string' ? file.bytes : '';
+  if (!bytes) return `[file: ${name}; mimeType=${mimeType}]`;
+  const decoded = decodeTextBytes(bytes, mimeType);
+  if (decoded !== undefined) return `[file: ${name}; mimeType=${mimeType}]\n${decoded}`;
+  return `[file: ${name}; mimeType=${mimeType}; base64Bytes=${bytes.length}]`;
+}
+
+function partToText(part) {
+  const kind = String(part?.kind || part?.type || '').toLowerCase();
+  if (typeof part?.text === 'string') return part.text.trim();
+  if (kind === 'file' || part?.file || part?.bytes || part?.uri || part?.url) return filePartToText(part);
+  if (kind === 'data' || part?.data !== undefined) return `data:\n${safeJson(part.data)}`;
+  if (part?.raw !== undefined) return `raw:\n${safeJson(part.raw)}`;
+  return '';
+}
+
+function contentFromMessage(message) {
   if (typeof message?.content === 'string') return message.content;
   const parts = Array.isArray(message?.parts) ? message.parts : [];
   return parts
-    .map((part) => typeof part?.text === 'string' ? part.text : '')
+    .map(partToText)
     .filter(Boolean)
-    .join('\n')
+    .join('\n\n')
     .trim();
 }
 
@@ -185,7 +238,7 @@ function buildAgentCard(req, service) {
       { transport: 'HTTP+JSON', url: endpoint }
     ],
     defaultInputModes: ['text/plain', 'application/json'],
-    defaultOutputModes: ['text/plain', 'application/json'],
+    defaultOutputModes: ['text/plain'],
     capabilities: {
       streaming: false,
       pushNotifications: false,
@@ -198,8 +251,8 @@ function buildAgentCard(req, service) {
 }
 
 async function handleSendMessage(api, service, requestId, params) {
-  const content = textFromMessage(params?.message);
-  if (!content) return jsonRpcError(requestId, -32602, 'message/send requires a text message');
+  const content = contentFromMessage(params?.message);
+  if (!content) return jsonRpcError(requestId, -32602, 'message/send requires at least one text, data, or file part');
 
   const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
   const contextId = String(params?.metadata?.contextId || params?.contextId || taskId);

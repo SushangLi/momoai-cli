@@ -117,7 +117,7 @@ function defaultPaths(agent: ResolvedAgentConfig, options: TailscaleFunnelOption
     const paths = uniquePaths([
       providerPath,
       normalizeRoutePath(options.agentCardPath, '/.well-known/agent-card.json'),
-      normalizeRoutePath(options.oasfPath, '/.well-known/oasf-record.json'),
+      normalizeRoutePath(options.marketPath, '/.well-known/momoai-a2a/market-card.json'),
       ...splitPaths(options.paths)
     ]);
     return { serviceId, providerPath, paths };
@@ -130,8 +130,8 @@ function defaultPaths(agent: ResolvedAgentConfig, options: TailscaleFunnelOption
   const paths = uniquePaths([
     providerPath,
     marketPath,
-    oasfPath,
     ...(options.includeStandard ? [upstreamPath, agentCardPath] : []),
+    ...splitPaths(options.oasfPath ? [oasfPath] : undefined),
     ...splitPaths(options.paths)
   ]);
   return { serviceId, providerPath, paths };

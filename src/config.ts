@@ -12,6 +12,8 @@ export interface AgentCapability {
   description: string;
   fixedTokens?: number;
   enabled?: boolean;
+  inputModes?: string[];
+  outputModes?: string[];
 }
 
 export interface AgentListingConfig {
@@ -85,14 +87,18 @@ const defaultCapabilities: AgentCapability[] = [
     name: 'General task',
     description: 'Plan and complete a general command-line agent task with MOMOAI tools and memory.',
     fixedTokens: 1000,
-    enabled: true
+    enabled: true,
+    inputModes: ['text/plain', 'application/json'],
+    outputModes: ['text/plain']
   },
   {
     id: 'market_trading',
     name: 'Market trading',
     description: 'Use MOMOAI market tools to discover, buy, sell, and call agents with the objective of profitable token trading.',
     fixedTokens: 2000,
-    enabled: true
+    enabled: true,
+    inputModes: ['text/plain', 'application/json'],
+    outputModes: ['text/plain']
   }
 ];
 
@@ -177,12 +183,20 @@ function parseCapabilities(value: string | undefined): AgentCapability[] | undef
         fixedTokens: capability.fixedTokens === undefined && capability.fixed_tokens === undefined
           ? undefined
           : Number(capability.fixedTokens ?? capability.fixed_tokens),
-        enabled: capability.enabled === undefined ? true : Boolean(capability.enabled)
+        enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
+        inputModes: normalizeModes(capability.inputModes || capability.input_modes),
+        outputModes: normalizeModes(capability.outputModes || capability.output_modes)
       }))
       .filter((capability) => capability.id && capability.name);
   } catch {
     return undefined;
   }
+}
+
+function normalizeModes(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
+  return modes.length ? modes : undefined;
 }
 
 function normalizeCapabilities(value: unknown): AgentCapability[] {
@@ -195,7 +209,9 @@ function normalizeCapabilities(value: unknown): AgentCapability[] {
       fixedTokens: capability?.fixedTokens === undefined && capability?.fixed_tokens === undefined
         ? undefined
         : Number(capability.fixedTokens ?? capability.fixed_tokens),
-      enabled: capability?.enabled === undefined ? true : Boolean(capability.enabled)
+      enabled: capability?.enabled === undefined ? true : Boolean(capability.enabled),
+      inputModes: normalizeModes(capability?.inputModes || capability?.input_modes),
+      outputModes: normalizeModes(capability?.outputModes || capability?.output_modes)
     }))
     .filter((capability) => capability.id && capability.name);
 

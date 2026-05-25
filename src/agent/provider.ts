@@ -5,6 +5,7 @@ import { buildAgentCard, buildOasfRecord } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import { startAgentServer } from './server.js';
+import { contentFromA2aMessage } from './message.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
 import type { ResolvedAgentConfig } from '../config.js';
 
@@ -69,18 +70,10 @@ function marketCapabilities(agent: ResolvedAgentConfig) {
       description: capability.description || '',
       fixedTokens: Number(capability.fixedTokens || 0),
       enabled: capability.enabled !== false,
-      sortOrder: index
+      sortOrder: index,
+      inputModes: capability.inputModes || ['text/plain', 'application/json'],
+      outputModes: capability.outputModes || ['text/plain']
     }));
-}
-
-function textFromA2aMessage(message: any) {
-  if (typeof message?.content === 'string') return message.content;
-  const parts = Array.isArray(message?.parts) ? message.parts : [];
-  return parts
-    .map((part: { text?: unknown }) => (typeof part?.text === 'string' ? part.text : ''))
-    .filter(Boolean)
-    .join('\n')
-    .trim();
 }
 
 function capabilityIdFromParams(params: any) {
@@ -129,8 +122,8 @@ async function executeProviderInvocation(invocation: ProviderInvocation, agent: 
   try {
     const auth = await verifyInvocationAuth(`Bearer ${invocation.invocation_token}`, agent.agentId);
     const params = request.params || {};
-    const content = textFromA2aMessage(params.message);
-    if (!content) return jsonRpcError(request.id, -32602, 'message/send requires a text message');
+    const content = contentFromA2aMessage(params.message);
+    if (!content) return jsonRpcError(request.id, -32602, 'message/send requires at least one text, data, or file part');
 
     const capabilityId = capabilityIdFromParams(params);
     if (!capabilityId) return jsonRpcError(request.id, -32602, 'message/send requires metadata.capability_id');

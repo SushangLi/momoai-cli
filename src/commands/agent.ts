@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { buildAgentCard, buildOasfRecord } from '../agent/card.js';
+import { buildAgentCard, buildMarketCard, buildOasfRecord } from '../agent/card.js';
 import { sendA2aMessage } from '../agent/client.js';
 import { installOpenClawA2a } from '../agent/openclaw.js';
 import { exposeViaTailscaleFunnel } from '../agent/tailscale.js';
@@ -24,7 +24,7 @@ function usage() {
     '  $agent expose tailscale [--profile <name>] [--kind cli|openclaw|custom] [--local-base-url http://127.0.0.1:18789] [--provider-path /momoai/a2a/<name>] [--paths <comma-list>] [--include-standard] [--dry-run] [--disable]',
     '  $agent openclaw install-a2a [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
-    '  $agent oasf [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
+    '  $agent market-card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--context <id>] [--show-plan] [--json]'
   ].join('\n'));
 }
@@ -90,10 +90,18 @@ function parseCapabilities(value: string): AgentCapability[] {
     fixedTokens: capability.fixedTokens === undefined && capability.fixed_tokens === undefined
       ? undefined
       : Number(capability.fixedTokens ?? capability.fixed_tokens),
-    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled)
+    enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
+    inputModes: normalizeModes(capability.inputModes || capability.input_modes),
+    outputModes: normalizeModes(capability.outputModes || capability.output_modes)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('--capabilities must include at least one capability with id and name.');
   return capabilities;
+}
+
+function normalizeModes(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
+  return modes.length ? modes : undefined;
 }
 
 function capabilitiesFromFlags(command: ParsedCommand) {
@@ -435,6 +443,19 @@ export async function agentCommand(command: ParsedCommand) {
     return;
   }
 
+  if (action === 'market-card' || action === 'market') {
+    const agent = agentWithFlags(config, command);
+    const card = buildMarketCard({
+      mode: modeFlag(command, agent.mode),
+      agentId: agent.agentId,
+      agent
+    });
+    if (command.flags.json) return printJson(card);
+    console.log(JSON.stringify(card, null, 2));
+    return;
+  }
+
+  // Hidden compatibility command. OASF is not part of the official A2A card flow.
   if (action === 'oasf') {
     const agent = agentWithFlags(config, command);
     const record = buildOasfRecord({
