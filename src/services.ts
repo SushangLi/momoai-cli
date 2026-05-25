@@ -123,7 +123,10 @@ function listingPayload(agent: ResolvedAgentConfig, overrides: {
         description: capability.description || '',
         fixedTokens: Number(capability.fixedTokens || 0),
         enabled: capability.enabled !== false,
-        sortOrder: index
+        sortOrder: index,
+        inputModes: capability.inputModes || ['text/plain', 'application/json'],
+        outputModes: capability.outputModes || ['text/plain'],
+        ...(capability.formatContract ? { formatContract: capability.formatContract } : {})
       }))
   };
 }

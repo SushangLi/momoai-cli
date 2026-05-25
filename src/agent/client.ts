@@ -53,6 +53,7 @@ export async function sendA2aMessage(options: {
   capabilityId?: string;
   contextId?: string;
   showPlan?: boolean;
+  acceptedOutputModes?: string[];
 }) {
   const endpoint = await resolveA2aEndpoint(options.endpoint);
   const fetchImpl: typeof fetch = (input, init = {}) => {
@@ -69,6 +70,9 @@ export async function sendA2aMessage(options: {
       parts: [{ kind: 'text', text: options.content }],
       ...(options.contextId ? { contextId: options.contextId } : {})
     },
+    ...(options.acceptedOutputModes?.length
+      ? { configuration: { acceptedOutputModes: options.acceptedOutputModes } }
+      : {}),
     metadata: {
       capability_id: options.capabilityId,
       contextId: options.contextId,
@@ -84,6 +88,7 @@ export async function sendA2aMessageLegacy(options: {
   capabilityId?: string;
   contextId?: string;
   showPlan?: boolean;
+  acceptedOutputModes?: string[];
 }) {
   const endpoint = await resolveA2aEndpoint(options.endpoint);
   const request: JsonRpcRequest = {
@@ -95,6 +100,9 @@ export async function sendA2aMessageLegacy(options: {
         role: 'user',
         parts: [{ kind: 'text', text: options.content }]
       },
+      ...(options.acceptedOutputModes?.length
+        ? { configuration: { acceptedOutputModes: options.acceptedOutputModes } }
+        : {}),
       metadata: {
         capability_id: options.capabilityId,
         contextId: options.contextId,

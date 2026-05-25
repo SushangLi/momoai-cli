@@ -37,7 +37,7 @@ const rules: Record<string, Rule> = {
   },
   agent: {
     subcommands: ['profile', 'publish', 'update-listing', 'serve', 'connect', 'expose', 'openclaw', 'card', 'market-card', 'call'],
-    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--context', '--show-plan', '--gateway-base-url', '--local-base-url', '--standard-plugin-source', '--official-a2a-plugin-source', '--skip-standard-plugin', '--upstream-path', '--protected-path', '--provider-path', '--agent-card-path', '--market-path', '--path', '--paths', '--card-path', '--service-id', '--kind', '--hostname', '--https-port', '--include-standard', '--disable', '--dry-run', '--allow-unauthenticated', '--forward-authorization', '--restart', '--json'],
+    flags: ['--profile', '--mode', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url', '--name', '--description', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--public', '--delisted', '--auth', '--capability', '--output-mode', '--context', '--show-plan', '--gateway-base-url', '--local-base-url', '--standard-plugin-source', '--official-a2a-plugin-source', '--skip-standard-plugin', '--upstream-path', '--protected-path', '--provider-path', '--agent-card-path', '--market-path', '--path', '--paths', '--card-path', '--service-id', '--kind', '--hostname', '--https-port', '--include-standard', '--disable', '--dry-run', '--allow-unauthenticated', '--forward-authorization', '--restart', '--json'],
     subcommandFlags: {
       profile: ['--name', '--description', '--host', '--port', '--agent-id', '--service', '--provider-runtime', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file'],
       publish: ['--profile', '--name', '--description', '--service', '--provider-runtime', '--provider-url', '--price', '--available-tokens', '--capabilities', '--capabilities-file', '--json'],
@@ -48,7 +48,7 @@ const rules: Record<string, Rule> = {
       openclaw: ['--profile', '--agent-id', '--service', '--provider-url', '--name', '--description', '--capabilities', '--capabilities-file', '--gateway-base-url', '--standard-plugin-source', '--official-a2a-plugin-source', '--skip-standard-plugin', '--upstream-path', '--protected-path', '--agent-card-path', '--market-path', '--path', '--card-path', '--service-id', '--allow-unauthenticated', '--forward-authorization', '--restart'],
       card: ['--profile', '--mode', '--agent-id', '--json'],
       'market-card': ['--profile', '--mode', '--agent-id', '--json'],
-      call: ['--auth', '--capability', '--context', '--show-plan', '--json']
+      call: ['--auth', '--capability', '--output-mode', '--context', '--show-plan', '--json']
     }
   },
   config: {

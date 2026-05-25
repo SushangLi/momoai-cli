@@ -375,6 +375,7 @@ function capabilitiesArg(value: unknown): AgentCapability[] | undefined {
     enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
     inputModes: modesArg(capability.inputModes || capability.input_modes),
     outputModes: modesArg(capability.outputModes || capability.output_modes),
+    formatContract: capability.formatContract || capability.format_contract,
     skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('capabilities must include at least one item');

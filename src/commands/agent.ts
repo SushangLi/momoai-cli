@@ -25,7 +25,7 @@ function usage() {
     '  $agent openclaw install-a2a [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent market-card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
-    '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--context <id>] [--show-plan] [--json]'
+    '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--output-mode <mime[,mime]>] [--context <id>] [--show-plan] [--json]'
   ].join('\n'));
 }
 
@@ -93,6 +93,7 @@ function parseCapabilities(value: string): AgentCapability[] {
     enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
     inputModes: normalizeModes(capability.inputModes || capability.input_modes),
     outputModes: normalizeModes(capability.outputModes || capability.output_modes),
+    formatContract: capability.formatContract || capability.format_contract,
     skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('--capabilities must include at least one capability with id and name.');
@@ -112,6 +113,13 @@ function capabilitiesFromFlags(command: ParsedCommand) {
   if (inline) return parseCapabilities(inline);
   if (file) return parseCapabilities(readFileSync(file, 'utf8'));
   return undefined;
+}
+
+function outputModesFlag(command: ParsedCommand) {
+  const value = flagString(command.flags, 'output-mode') || flagString(command.flags, 'output_mode') || flagString(command.flags, 'accepted-output-modes') || flagString(command.flags, 'accepted_output_modes');
+  if (!value) return undefined;
+  const modes = [...new Set(value.split(',').map((mode) => mode.trim()).filter(Boolean))];
+  return modes.length ? modes : undefined;
 }
 
 function localProfile(config: CliConfig, profileName?: string): ResolvedAgentConfig {
@@ -487,6 +495,7 @@ export async function agentCommand(command: ParsedCommand) {
       authToken: flagString(command.flags, 'auth') || config.account?.momoKey,
       capabilityId: flagString(command.flags, 'capability') || flagString(command.flags, 'capability-id') || flagString(command.flags, 'capability_id'),
       contextId: flagString(command.flags, 'context'),
+      acceptedOutputModes: outputModesFlag(command),
       showPlan: command.flags['show-plan'] === true || command.flags.showPlan === true
     });
     if (command.flags.json) return printJson(result);

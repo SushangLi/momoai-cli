@@ -78,7 +78,8 @@ function renderMarketCapabilities(capabilities: AgentCapability[]) {
       enabled: true,
       sortOrder: index,
       inputModes: uniqueModes(capability.inputModes, ['text/plain', 'application/json']),
-      outputModes: uniqueModes(capability.outputModes, ['text/plain'])
+      outputModes: uniqueModes(capability.outputModes, ['text/plain']),
+      ...(capability.formatContract ? { formatContract: capability.formatContract } : {})
     }));
 }
 

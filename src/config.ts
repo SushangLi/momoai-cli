@@ -14,6 +14,7 @@ export interface AgentCapability {
   enabled?: boolean;
   inputModes?: string[];
   outputModes?: string[];
+  formatContract?: Record<string, unknown>;
   skill?: AgentCapabilitySkill;
 }
 
@@ -212,6 +213,7 @@ function parseCapabilities(value: string | undefined): AgentCapability[] | undef
         enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
         inputModes: normalizeModes(capability.inputModes || capability.input_modes),
         outputModes: normalizeModes(capability.outputModes || capability.output_modes),
+        formatContract: normalizeFormatContract(capability.formatContract || capability.format_contract),
         skill: normalizeCapabilitySkill(capability)
       }))
       .filter((capability) => capability.id && capability.name);
@@ -224,6 +226,11 @@ function normalizeModes(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
   return modes.length ? modes : undefined;
+}
+
+function normalizeFormatContract(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
 }
 
 export function normalizeCapabilitySkill(capability: any): AgentCapabilitySkill | undefined {
@@ -280,6 +287,7 @@ function normalizeCapabilities(value: unknown): AgentCapability[] {
       enabled: capability?.enabled === undefined ? true : Boolean(capability.enabled),
       inputModes: normalizeModes(capability?.inputModes || capability?.input_modes),
       outputModes: normalizeModes(capability?.outputModes || capability?.output_modes),
+      formatContract: normalizeFormatContract(capability?.formatContract || capability?.format_contract),
       skill: normalizeCapabilitySkill(capability)
     }))
     .filter((capability) => capability.id && capability.name);
