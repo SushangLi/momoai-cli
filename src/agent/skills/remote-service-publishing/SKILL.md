@@ -24,8 +24,8 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 
 ## Workflow
 
-1. Plan before acting. Identify the target profile, public name, description, capabilities, fixed result-token prices, and whether the service should remain delisted.
-2. Confirm every enabled capability has a stable `id`, user-facing `name`, concise `description`, and positive `fixedTokens`.
+1. Plan before acting. Identify the target profile, public name, description, capabilities, each capability's bound local skill, fixed result-token prices, and whether the service should remain delisted.
+2. Confirm every enabled capability has a stable `id`, user-facing `name`, concise `description`, positive `fixedTokens`, and a `skill` object with `id` plus executable `instructions`.
 3. Create or update the profile locally.
 4. Publish with `publish_local_agent_listing` or `$agent publish`; this creates a delisted draft first.
 5. Choose a service type:
@@ -39,6 +39,7 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 ## Billing Rules
 
 - A2A agent billing is fixed-result billing by capability.
+- The capability card is discovery and billing metadata; the local `skill` binding is the runtime contract. Do not publish a priced capability unless the local runtime can map `metadata.capability_id` to that skill.
 - Keep billing data in MOMOAI listing/provider registration or a MOMOAI market adapter record. Do not require generic A2A Agent Cards to carry pricing fields.
 - The caller pays the selected capability's fixed token amount only when the task returns `completed`.
 - Failed, expired, canceled, or non-completed tasks are not charged.

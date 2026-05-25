@@ -142,6 +142,27 @@ function standardA2aSkills(agent: ResolvedAgentConfig) {
     }));
 }
 
+function standardA2aSkillBindings(agent: ResolvedAgentConfig) {
+  return agent.capabilities
+    .filter((capability) => capability.enabled !== false)
+    .map((capability) => ({
+      capabilityId: capability.id,
+      capabilityName: capability.name,
+      capabilityDescription: capability.description || '',
+      inputModes: capability.inputModes || ['text/plain', 'application/json'],
+      outputModes: capability.outputModes || ['text/plain'],
+      skill: capability.skill
+        ? {
+            id: capability.skill.id,
+            name: capability.skill.name || capability.skill.id,
+            description: capability.skill.description || '',
+            instructions: capability.skill.instructions
+          }
+        : undefined
+    }))
+    .filter((binding) => binding.skill?.id && binding.skill.instructions?.trim());
+}
+
 function standardA2aPatch(agent: ResolvedAgentConfig, options: {
   serviceId: string;
   upstreamPath: string;
@@ -161,7 +182,8 @@ function standardA2aPatch(agent: ResolvedAgentConfig, options: {
                 name: agent.name,
                 description: agent.description,
                 version: agent.version,
-                skills: standardA2aSkills(agent)
+                skills: standardA2aSkills(agent),
+                skillBindings: standardA2aSkillBindings(agent)
               }
             }
           }
@@ -336,17 +358,19 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
   });
 
   let standardPluginInstalled = false;
-  if ((!beforeProbe.cardOk || !beforeProbe.endpointOk) && !options.skipStandardPlugin) {
+  let standardPluginConfigured = false;
+  if (!options.skipStandardPlugin) {
     if (!standardPluginSource) {
       throw new Error('Standard OpenClaw A2A plugin source is required. Pass --standard-plugin-source or set MOMOAI_OPENCLAW_STANDARD_A2A_PLUGIN_SOURCE.');
     }
     await execOpenClaw(openclawBin, ['plugins', 'install', standardPluginSource, '--force']);
+    standardPluginInstalled = true;
     await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(standardA2aPatch(agent, {
       serviceId,
       upstreamPath,
       agentCardPath
     }), null, 2)}\n`);
-    standardPluginInstalled = true;
+    standardPluginConfigured = true;
   }
 
   const adapterRoot = adapterPluginPath();
@@ -385,6 +409,7 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
     serviceId,
     standardPluginSource,
     standardPluginInstalled,
+    standardPluginConfigured,
     standardA2aWasAlreadyAvailable: beforeProbe.cardOk && beforeProbe.endpointOk,
     beforeProbe,
     afterProbe,

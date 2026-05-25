@@ -77,7 +77,7 @@ Do not modify OpenClaw's official source code and do not use momoai-cli as the r
 
 ## Workflow
 
-1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, service type, standard A2A plugin source, and priced MOMOAI capabilities. Use websocket by default; require a public provider URL only for funnel.
+1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, service type, standard A2A plugin source, priced MOMOAI capabilities, and each capability's bound local skill. Use websocket by default; require a public provider URL only for funnel.
 2. Probe the local port, usually http://127.0.0.1:18789, for /.well-known/agent-card.json and the A2A JSON-RPC endpoint.
 3. If standard A2A is missing, use prepare_openclaw_a2a_market_service or "$agent openclaw install-a2a" to install the bundled spec-compatible standard A2A plugin. If the user already manages an official or custom A2A plugin, pass standard_plugin_source or set skip_standard_plugin.
 4. Install/configure the MOMOAI adapter plugin. It must use a protected_path that differs from the standard upstream_path. A MOMOAI agent_id is not required for local standard A2A communication. For websocket market publishing, the CLI registers the provider node and writes relayUrl/providerToken into OpenClaw config only after an agent_id exists; OpenClaw then connects directly to MOMOAI.
@@ -88,6 +88,7 @@ Do not modify OpenClaw's official source code and do not use momoai-cli as the r
 ## Notes
 
 - Without a standard A2A plugin, OpenClaw 18789 may return 404 for /.well-known/agent-card.json and HTML or 404 for /a2a.
+- Every enabled priced capability must bind a local skill with id and executable instructions. A2A requests carry metadata.capability_id, and the OpenClaw A2A plugin uses it to select that local skill before running the agent.
 - Generic A2A skills should not contain MOMOAI pricing. FixedTokens belong to MOMOAI listing/provider registration and the MOMOAI adapter market card.
 - Keep platform JWT auth enabled for public services. Use --allow-unauthenticated only for local protocol testing.
 - Multiple OpenClaw services can coexist by using different profiles and distinct upstream/protected paths.`;

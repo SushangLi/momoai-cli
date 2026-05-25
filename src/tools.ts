@@ -1,4 +1,4 @@
-import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
+import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeCapabilitySkill, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
 import { installOpenClawA2a } from './agent/openclaw.js';
 import { exposeViaTailscaleFunnel } from './agent/tailscale.js';
 import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
@@ -125,9 +125,20 @@ export const momoTools = [
                 fixedTokens: { type: 'number' },
                 enabled: { type: 'boolean' },
                 inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } }
+                outputModes: { type: 'array', items: { type: 'string' } },
+                skill: {
+                  type: 'object',
+                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
+                  },
+                  required: ['id', 'instructions']
+                }
               },
-              required: ['id', 'name', 'fixedTokens']
+              required: ['id', 'name', 'fixedTokens', 'skill']
             }
           }
         },
@@ -165,9 +176,20 @@ export const momoTools = [
                 fixedTokens: { type: 'number' },
                 enabled: { type: 'boolean' },
                 inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } }
+                outputModes: { type: 'array', items: { type: 'string' } },
+                skill: {
+                  type: 'object',
+                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
+                  },
+                  required: ['id', 'instructions']
+                }
               },
-              required: ['id', 'name', 'fixedTokens']
+              required: ['id', 'name', 'fixedTokens', 'skill']
             }
           }
         }
@@ -210,9 +232,20 @@ export const momoTools = [
                 fixedTokens: { type: 'number' },
                 enabled: { type: 'boolean' },
                 inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } }
+                outputModes: { type: 'array', items: { type: 'string' } },
+                skill: {
+                  type: 'object',
+                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
+                  },
+                  required: ['id', 'instructions']
+                }
               },
-              required: ['id', 'name', 'fixedTokens']
+              required: ['id', 'name', 'fixedTokens', 'skill']
             }
           }
         }
@@ -281,9 +314,20 @@ export const momoTools = [
                 fixedTokens: { type: 'number' },
                 enabled: { type: 'boolean' },
                 inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } }
+                outputModes: { type: 'array', items: { type: 'string' } },
+                skill: {
+                  type: 'object',
+                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
+                  },
+                  required: ['id', 'instructions']
+                }
               },
-              required: ['id', 'name', 'fixedTokens']
+              required: ['id', 'name', 'fixedTokens', 'skill']
             }
           }
         }
@@ -330,7 +374,8 @@ function capabilitiesArg(value: unknown): AgentCapability[] | undefined {
     fixedTokens: Number(capability.fixedTokens ?? capability.fixed_tokens),
     enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
     inputModes: modesArg(capability.inputModes || capability.input_modes),
-    outputModes: modesArg(capability.outputModes || capability.output_modes)
+    outputModes: modesArg(capability.outputModes || capability.output_modes),
+    skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('capabilities must include at least one item');
   return capabilities;
@@ -388,6 +433,21 @@ function saveToolAgent(agent: ResolvedAgentConfig) {
   });
 }
 
+function validateBillableCapabilities(agent: ResolvedAgentConfig) {
+  const invalid = agent.capabilities
+    .filter((capability) => capability.enabled !== false)
+    .filter((capability) => !Number.isFinite(Number(capability.fixedTokens)) || Number(capability.fixedTokens) <= 0);
+  if (invalid.length) {
+    throw new Error(`A2A listing capabilities require positive fixedTokens: ${invalid.map((capability) => capability.id).join(', ')}`);
+  }
+  const unbound = agent.capabilities
+    .filter((capability) => capability.enabled !== false)
+    .filter((capability) => !capability.skill?.id || !capability.skill.instructions?.trim());
+  if (unbound.length) {
+    throw new Error(`A2A listing capabilities require a local skill binding with instructions: ${unbound.map((capability) => capability.id).join(', ')}`);
+  }
+}
+
 export async function executeToolCall(
   name: string,
   rawArgs: string | undefined,
@@ -430,6 +490,7 @@ export async function executeToolCall(
     }
     if (name === 'publish_local_agent_listing') {
       const agent = agentForTool(args);
+      validateBillableCapabilities(agent);
       const listing = await publishLocalAgentListing(agent, {
         name: agent.name,
         description: agent.description,
@@ -442,6 +503,7 @@ export async function executeToolCall(
     }
     if (name === 'update_local_agent_listing') {
       const agent = agentForTool(args);
+      validateBillableCapabilities(agent);
       const isDelisted = args.public === true ? false : args.delisted === true ? true : undefined;
       const listing = await updateLocalAgentListing(agent, {
         agentId: agent.agentId,
@@ -467,6 +529,7 @@ export async function executeToolCall(
         providerRuntime: 'external' as const,
         serviceType
       };
+      validateBillableCapabilities(agent);
       const result = await installOpenClawA2a(agent, {
         gatewayBaseUrl: typeof args.gateway_base_url === 'string' ? args.gateway_base_url : undefined,
         standardPluginSource: typeof args.standard_plugin_source === 'string' ? args.standard_plugin_source : undefined,

@@ -52,11 +52,49 @@
             "items": {
               "type": "string"
             }
+          },
+          "instructions": {
+            "type": "string"
           }
         },
         "required": [
           "id",
           "name"
+        ]
+      },
+      "skillBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capabilityName": {
+            "type": "string"
+          },
+          "capabilityDescription": {
+            "type": "string"
+          },
+          "inputModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outputModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skill": {
+            "$ref": "#/$defs/skill"
+          }
+        },
+        "required": [
+          "capabilityId",
+          "skill"
         ]
       },
       "service": {
@@ -98,6 +136,12 @@
             "type": "array",
             "items": {
               "$ref": "#/$defs/skill"
+            }
+          },
+          "skillBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/skillBinding"
             }
           }
         }

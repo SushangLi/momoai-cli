@@ -130,6 +130,11 @@ async function executeProviderInvocation(invocation: ProviderInvocation, agent: 
     if (auth.capabilityId && auth.capabilityId !== capabilityId) {
       return jsonRpcError(request.id, -32602, 'capability_id does not match platform invocation token');
     }
+    const capability = agent.capabilities.find((item) => item.enabled !== false && item.id === capabilityId);
+    if (!capability) return jsonRpcError(request.id, -32602, `Unknown or disabled capability_id: ${capabilityId}`);
+    if (!capability.skill?.id || !capability.skill.instructions?.trim()) {
+      return jsonRpcError(request.id, -32602, `Capability ${capabilityId} is not bound to a local skill with instructions`);
+    }
 
     const result = await new AgentRuntime().run({
       content,

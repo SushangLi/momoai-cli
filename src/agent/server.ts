@@ -80,6 +80,12 @@ async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent
   if (capabilityId && !knownCapabilityIds.has(capabilityId)) {
     return jsonRpcError(request.id, -32602, `Unknown or disabled capability_id: ${capabilityId}`);
   }
+  if (capabilityId) {
+    const capability = agent.capabilities.find((item) => item.enabled !== false && item.id === capabilityId);
+    if (!capability?.skill?.id || !capability.skill.instructions?.trim()) {
+      return jsonRpcError(request.id, -32602, `Capability ${capabilityId} is not bound to a local skill with instructions`);
+    }
+  }
 
   const contextId = String(params.metadata?.contextId || params.contextId || auth?.runId || makeId('ctx'));
   const task: StoredTask = {

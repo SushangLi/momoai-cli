@@ -1,5 +1,6 @@
 import { CliError, MomoClient } from '../client.js';
 import { loadConfig } from '../config.js';
+import type { ResolvedAgentConfig } from '../config.js';
 import { modelAgentId } from '../model.js';
 import { executeToolCall, momoTools } from '../tools.js';
 import type { ConfirmTool } from '../tools.js';
@@ -38,6 +39,38 @@ function ensureUsage(usage: AgentRunResult['usage'], messages: unknown, content:
   };
 }
 
+type AgentWithCapabilities = Pick<ResolvedAgentConfig, 'capabilities'>;
+
+function selectedCapability(agent: AgentWithCapabilities, capabilityId?: string) {
+  if (!capabilityId) return undefined;
+  return agent.capabilities.find((capability) => capability.enabled !== false && capability.id === capabilityId);
+}
+
+function renderCapabilitySkillContext(agent: AgentWithCapabilities, capabilityId?: string) {
+  const capability = selectedCapability(agent, capabilityId);
+  if (!capabilityId) return '';
+  if (!capability) {
+    throw new Error(`Unknown or disabled capability_id: ${capabilityId}`);
+  }
+  if (!capability.skill?.id || !capability.skill.instructions?.trim()) {
+    throw new Error(`Capability ${capabilityId} is not bound to a local skill with instructions.`);
+  }
+  return [
+    'Current A2A capability and local skill binding:',
+    `- capability_id: ${capability.id}`,
+    `- capability_name: ${capability.name}`,
+    capability.description ? `- capability_description: ${capability.description}` : '',
+    `- local_skill_id: ${capability.skill.id}`,
+    capability.skill.name ? `- local_skill_name: ${capability.skill.name}` : '',
+    capability.skill.description ? `- local_skill_description: ${capability.skill.description}` : '',
+    `- input_modes: ${(capability.inputModes || ['text/plain', 'application/json']).join(', ')}`,
+    `- output_modes: ${(capability.outputModes || ['text/plain']).join(', ')}`,
+    '',
+    'Local skill instructions:',
+    capability.skill.instructions
+  ].filter(Boolean).join('\n');
+}
+
 export class AgentRuntime {
   private memory = new AgentMemory();
 
@@ -50,7 +83,7 @@ export class AgentRuntime {
     return undefined;
   }
 
-  private async createPlan(input: AgentRunInput, summary: string, index: string, marketTradingSkill: string, remoteServicePublishingSkill: string, openClawA2aPublishingSkill: string, authToken?: string) {
+  private async createPlan(input: AgentRunInput, summary: string, index: string, marketTradingSkill: string, remoteServicePublishingSkill: string, openClawA2aPublishingSkill: string, capabilitySkillContext: string, authToken?: string) {
     const config = loadConfig();
     const response = await new MomoClient().request<any>('/v1/chat/completions', {
       authToken,
@@ -64,6 +97,8 @@ export class AgentRuntime {
               'Before any action, produce a concise executable plan.',
               'Do not call tools. Do not answer the user yet.',
               'Include whether external tools or child agents are likely needed.',
+              '',
+              capabilitySkillContext || 'No explicit A2A capability skill is selected for this request.',
               '',
               'MOMOAI market trading skill:',
               marketTradingSkill,
@@ -106,6 +141,7 @@ export class AgentRuntime {
     const config = loadConfig();
     const agent = input.agent || config.agent;
     const mode = input.mode || agent.mode;
+    const capabilitySkillContext = renderCapabilitySkillContext(agent, input.capabilityId);
     const contextId = input.contextId || 'default';
     const snapshot = this.memory.load(contextId);
     const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -113,7 +149,7 @@ export class AgentRuntime {
     const marketTradingSkill = loadMarketTradingSkill();
     const remoteServicePublishingSkill = loadRemoteServicePublishingSkill();
     const openClawA2aPublishingSkill = loadOpenClawA2aPublishingSkill();
-    const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, remoteServicePublishingSkill, openClawA2aPublishingSkill, modelAuthToken);
+    const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, remoteServicePublishingSkill, openClawA2aPublishingSkill, capabilitySkillContext, modelAuthToken);
     addUsage(usage, plan.usage);
 
     const systemMessage = {
@@ -129,6 +165,8 @@ export class AgentRuntime {
           ? '- Remote service execution is result-priced by capability. Do not expose internal model usage as caller billing.'
           : '- Local execution has no CLI agent fee. Model and child agent calls use the local user account.',
         ...(input.capabilityId ? [`- Current capability id: ${input.capabilityId}`] : []),
+        '',
+        capabilitySkillContext || 'No explicit A2A capability skill is selected for this request.',
         '',
         'MOMOAI market trading skill:',
         marketTradingSkill,

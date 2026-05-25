@@ -14,6 +14,14 @@ export interface AgentCapability {
   enabled?: boolean;
   inputModes?: string[];
   outputModes?: string[];
+  skill?: AgentCapabilitySkill;
+}
+
+export interface AgentCapabilitySkill {
+  id: string;
+  name?: string;
+  description?: string;
+  instructions: string;
 }
 
 export interface AgentListingConfig {
@@ -89,7 +97,16 @@ const defaultCapabilities: AgentCapability[] = [
     fixedTokens: 1000,
     enabled: true,
     inputModes: ['text/plain', 'application/json'],
-    outputModes: ['text/plain']
+    outputModes: ['text/plain'],
+    skill: {
+      id: 'general_task',
+      name: 'General task execution',
+      description: 'Handle a general A2A task through the CLI agent runtime.',
+      instructions: [
+        'Understand the requested outcome, create a concise plan before taking action, then use available tools only when needed.',
+        'Keep context and memory consistent, avoid exposing hidden reasoning, and return a clear task result.'
+      ].join(' ')
+    }
   },
   {
     id: 'market_trading',
@@ -98,7 +115,16 @@ const defaultCapabilities: AgentCapability[] = [
     fixedTokens: 2000,
     enabled: true,
     inputModes: ['text/plain', 'application/json'],
-    outputModes: ['text/plain']
+    outputModes: ['text/plain'],
+    skill: {
+      id: 'market_trading',
+      name: 'MOMOAI market trading',
+      description: 'Trade and route work through MOMOAI market agents.',
+      instructions: [
+        'Use the MOMOAI market trading skill and tools to evaluate listings, buy or sell tokens when justified by the approved plan, and call child agents only when the expected result supports the trading objective.',
+        'Track caller cost boundaries and explain completed trading actions in the final result.'
+      ].join(' ')
+    }
   }
 ];
 
@@ -185,7 +211,8 @@ function parseCapabilities(value: string | undefined): AgentCapability[] | undef
           : Number(capability.fixedTokens ?? capability.fixed_tokens),
         enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
         inputModes: normalizeModes(capability.inputModes || capability.input_modes),
-        outputModes: normalizeModes(capability.outputModes || capability.output_modes)
+        outputModes: normalizeModes(capability.outputModes || capability.output_modes),
+        skill: normalizeCapabilitySkill(capability)
       }))
       .filter((capability) => capability.id && capability.name);
   } catch {
@@ -197,6 +224,47 @@ function normalizeModes(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const modes = [...new Set(value.map((mode) => String(mode || '').trim()).filter(Boolean))];
   return modes.length ? modes : undefined;
+}
+
+export function normalizeCapabilitySkill(capability: any): AgentCapabilitySkill | undefined {
+  const source =
+    capability?.skill ||
+    capability?.localSkill ||
+    capability?.local_skill ||
+    (capability?.skillId || capability?.skill_id || capability?.skillInstructions || capability?.skill_instructions || capability?.instructions
+      ? {
+          id: capability.skillId || capability.skill_id,
+          name: capability.skillName || capability.skill_name,
+          description: capability.skillDescription || capability.skill_description,
+          instructions: capability.skillInstructions || capability.skill_instructions || capability.instructions
+        }
+      : undefined);
+  if (source === undefined || source === null || source === '') return undefined;
+  if (typeof source === 'string') {
+    const id = source.trim();
+    return id ? { id, instructions: '' } : undefined;
+  }
+  if (typeof source !== 'object' || Array.isArray(source)) return undefined;
+  const skill = source as Record<string, unknown>;
+  const id = String(skill.id || skill.skill_id || skill.skillId || capability?.id || capability?.capability_id || capability?.capabilityId || '').trim();
+  const name = String(skill.name || skill.skill_name || '').trim();
+  const description = String(skill.description || skill.skill_description || capability?.description || '').trim();
+  const instructions = String(
+    skill.instructions ||
+      skill.instruction ||
+      skill.prompt ||
+      skill.how ||
+      skill.howTo ||
+      skill.how_to ||
+      ''
+  ).trim();
+  if (!id) return undefined;
+  return {
+    id,
+    ...(name ? { name } : {}),
+    ...(description ? { description } : {}),
+    instructions
+  };
 }
 
 function normalizeCapabilities(value: unknown): AgentCapability[] {
@@ -211,7 +279,8 @@ function normalizeCapabilities(value: unknown): AgentCapability[] {
         : Number(capability.fixedTokens ?? capability.fixed_tokens),
       enabled: capability?.enabled === undefined ? true : Boolean(capability.enabled),
       inputModes: normalizeModes(capability?.inputModes || capability?.input_modes),
-      outputModes: normalizeModes(capability?.outputModes || capability?.output_modes)
+      outputModes: normalizeModes(capability?.outputModes || capability?.output_modes),
+      skill: normalizeCapabilitySkill(capability)
     }))
     .filter((capability) => capability.id && capability.name);
 

@@ -36,6 +36,28 @@ function normalizeSkill(value, index) {
   };
 }
 
+function normalizeSkillBinding(value, index) {
+  const binding = isRecord(value) ? value : {};
+  const skill = isRecord(binding.skill) ? binding.skill : {};
+  const capabilityId = normalizeString(binding.capabilityId || binding.capability_id || binding.id, `capability_${index + 1}`);
+  const skillId = normalizeString(skill.id || binding.skillId || binding.skill_id, '');
+  const instructions = normalizeString(skill.instructions || binding.instructions, '');
+  if (!capabilityId || !skillId || !instructions) return undefined;
+  return {
+    capabilityId,
+    capabilityName: normalizeString(binding.capabilityName || binding.capability_name || binding.name, capabilityId),
+    capabilityDescription: normalizeString(binding.capabilityDescription || binding.capability_description || binding.description, ''),
+    inputModes: normalizeModes(binding.inputModes || binding.input_modes, ['text/plain', 'application/json']),
+    outputModes: normalizeModes(binding.outputModes || binding.output_modes, ['text/plain']),
+    skill: {
+      id: skillId,
+      name: normalizeString(skill.name || binding.skillName || binding.skill_name, skillId),
+      description: normalizeString(skill.description || binding.skillDescription || binding.skill_description, ''),
+      instructions
+    }
+  };
+}
+
 function defaultSkills() {
   return [
     {
@@ -55,6 +77,9 @@ function normalizeService(serviceId, rawService) {
   const endpointPath = normalizePath(service.endpointPath || service.upstreamPath, isDefault ? '/a2a' : `/a2a/${serviceId}`);
   const agentCardPath = normalizePath(service.agentCardPath, isDefault ? '/.well-known/agent-card.json' : `/.well-known/a2a/${serviceId}/agent-card.json`);
   const skills = Array.isArray(service.skills) ? service.skills.map(normalizeSkill).filter((skill) => skill.id && skill.name) : defaultSkills();
+  const skillBindings = Array.isArray(service.skillBindings)
+    ? service.skillBindings.map(normalizeSkillBinding).filter(Boolean)
+    : [];
   const timeoutSeconds = Number(service.timeoutSeconds || 600);
   return {
     id: serviceId,
@@ -67,7 +92,8 @@ function normalizeService(serviceId, rawService) {
     openclawBin: normalizeString(service.openclawBin, 'openclaw'),
     openclawAgent: normalizeString(service.openclawAgent, ''),
     timeoutSeconds: Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? Math.floor(timeoutSeconds) : 600,
-    skills: skills.length ? skills : defaultSkills()
+    skills: skills.length ? skills : defaultSkills(),
+    skillBindings
   };
 }
 
@@ -177,6 +203,44 @@ function contentFromMessage(message) {
     .trim();
 }
 
+function capabilityIdFromParams(params) {
+  return String(params?.metadata?.capability_id || params?.metadata?.capabilityId || params?.capability_id || params?.capabilityId || '').trim();
+}
+
+function skillBindingForRequest(service, params) {
+  const capabilityId = capabilityIdFromParams(params);
+  if (!capabilityId) return { capabilityId: '', binding: undefined };
+  return {
+    capabilityId,
+    binding: service.skillBindings.find((item) => item.capabilityId === capabilityId)
+  };
+}
+
+function promptWithSkillBinding(content, binding) {
+  if (!binding) return content;
+  return [
+    'A2A capability selected by the caller:',
+    `capability_id: ${binding.capabilityId}`,
+    `capability_name: ${binding.capabilityName}`,
+    binding.capabilityDescription ? `capability_description: ${binding.capabilityDescription}` : '',
+    `input_modes: ${binding.inputModes.join(', ')}`,
+    `output_modes: ${binding.outputModes.join(', ')}`,
+    '',
+    'Local skill binding for this capability:',
+    `skill_id: ${binding.skill.id}`,
+    `skill_name: ${binding.skill.name}`,
+    binding.skill.description ? `skill_description: ${binding.skill.description}` : '',
+    '',
+    'Skill instructions:',
+    binding.skill.instructions,
+    '',
+    'Execute this request according to the selected capability and local skill. Do not guess another capability.',
+    '',
+    'User request:',
+    content
+  ].filter(Boolean).join('\n');
+}
+
 function collectPayloadText(payloads) {
   return (Array.isArray(payloads) ? payloads : [])
     .map((payload) => payload && payload.isReasoning !== true && typeof payload.text === 'string' ? payload.text.trim() : '')
@@ -254,6 +318,14 @@ async function handleSendMessage(api, service, requestId, params) {
   const content = contentFromMessage(params?.message);
   if (!content) return jsonRpcError(requestId, -32602, 'message/send requires at least one text, data, or file part');
 
+  const { capabilityId, binding } = skillBindingForRequest(service, params);
+  if (!capabilityId && service.skillBindings.length > 0) {
+    return jsonRpcError(requestId, -32602, 'message/send requires metadata.capability_id so OpenClaw can select the bound local skill');
+  }
+  if (capabilityId && !binding) {
+    return jsonRpcError(requestId, -32602, `Unknown or unbound capability_id: ${capabilityId}`);
+  }
+
   const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
   const contextId = String(params?.metadata?.contextId || params?.contextId || taskId);
   const task = {
@@ -261,7 +333,7 @@ async function handleSendMessage(api, service, requestId, params) {
     contextId,
     status: {
       state: 'TASK_STATE_WORKING',
-      message: taskMessage('agent', 'Working', { contextId })
+      message: taskMessage('agent', 'Working', { contextId, ...(capabilityId ? { capability_id: capabilityId, skill_id: binding?.skill.id } : {}) })
     },
     artifacts: [],
     history: [params.message]
@@ -269,16 +341,19 @@ async function handleSendMessage(api, service, requestId, params) {
   tasks.set(taskId, task);
 
   try {
-    const reply = await invokeOpenClaw(api, service, content, contextId);
+    const reply = await invokeOpenClaw(api, service, promptWithSkillBinding(content, binding), contextId);
     task.status = {
       state: 'TASK_STATE_COMPLETED',
-      message: taskMessage('agent', reply, { contextId })
+      message: taskMessage('agent', reply, { contextId, ...(capabilityId ? { capability_id: capabilityId, skill_id: binding?.skill.id } : {}) })
     };
     task.artifacts = [
       {
         artifactId: `artifact_${taskId}`,
         name: 'result',
-        parts: [{ kind: 'text', text: reply }]
+        parts: [{ kind: 'text', text: reply }],
+        metadata: {
+          ...(capabilityId ? { capability_id: capabilityId, skill_id: binding?.skill.id } : {})
+        }
       }
     ];
     tasks.set(taskId, task);
@@ -287,7 +362,7 @@ async function handleSendMessage(api, service, requestId, params) {
     const message = error instanceof Error ? error.message : String(error);
     task.status = {
       state: 'TASK_STATE_FAILED',
-      message: taskMessage('agent', message, { contextId })
+      message: taskMessage('agent', message, { contextId, ...(capabilityId ? { capability_id: capabilityId, skill_id: binding?.skill.id } : {}) })
     };
     tasks.set(taskId, task);
     return jsonRpcResult(requestId, task);

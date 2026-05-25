@@ -13,7 +13,7 @@ Split the integration:
 
 ## Workflow
 
-1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, priced capabilities, and service type. Use `websocket` by default; require a public provider URL only for `funnel`. A MOMOAI `agent_id` is not required for local standard A2A communication.
+1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, priced capabilities, each capability's bound local skill, and service type. Use `websocket` by default; require a public provider URL only for `funnel`. A MOMOAI `agent_id` is not required for local standard A2A communication.
 2. Probe the local service, usually `http://127.0.0.1:18789`, for `/.well-known/agent-card.json` and a JSON-RPC A2A endpoint.
 3. If standard A2A is missing, run `prepare_openclaw_a2a_market_service` or `$agent openclaw install-a2a`. This installs the bundled standard A2A plugin first unless `--standard-plugin-source` points at another plugin or `--skip-standard-plugin` is set.
 4. Install/configure the MOMOAI adapter plugin in OpenClaw. Its `protected_path` must differ from the standard `upstream_path`.
@@ -31,6 +31,7 @@ Split the integration:
 
 ## Notes
 
+- Every enabled priced capability must bind a local skill with `id` and `instructions`. The A2A request must carry `metadata.capability_id`; the standard OpenClaw A2A plugin uses it to select the local skill and inject its instructions into the OpenClaw run.
 - Generic A2A skills should not contain MOMOAI pricing. Fixed `fixedTokens` values belong to MOMOAI listing/provider registration and the MOMOAI adapter market card.
 - The standard A2A endpoint remains usable by generic agents. The MOMOAI protected endpoint and WebSocket relay handler are for paid marketplace invocations.
 - Multiple OpenClaw services can coexist with distinct profiles and paths such as `/a2a/gomoku` plus `/momoai/a2a/gomoku`.

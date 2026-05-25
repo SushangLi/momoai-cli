@@ -5,7 +5,7 @@ import { installOpenClawA2a } from '../agent/openclaw.js';
 import { exposeViaTailscaleFunnel } from '../agent/tailscale.js';
 import { runRemoteServiceProvider } from '../agent/provider.js';
 import { startAgentServer } from '../agent/server.js';
-import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
+import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeCapabilitySkill, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from '../config.js';
 import { printJson, table } from '../format.js';
 import { flagNumber, flagString } from '../parser.js';
 import { publishLocalAgentListing, updateLocalAgentListing } from '../services.js';
@@ -92,7 +92,8 @@ function parseCapabilities(value: string): AgentCapability[] {
       : Number(capability.fixedTokens ?? capability.fixed_tokens),
     enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
     inputModes: normalizeModes(capability.inputModes || capability.input_modes),
-    outputModes: normalizeModes(capability.outputModes || capability.output_modes)
+    outputModes: normalizeModes(capability.outputModes || capability.output_modes),
+    skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('--capabilities must include at least one capability with id and name.');
   return capabilities;
@@ -184,6 +185,13 @@ function validateBillableCapabilities(agent: ResolvedAgentConfig) {
     .filter((capability) => !Number.isFinite(Number(capability.fixedTokens)) || Number(capability.fixedTokens) <= 0);
   if (invalid.length > 0) {
     throw new Error(`A2A listing capabilities require positive fixedTokens: ${invalid.map((capability) => capability.id).join(', ')}`);
+  }
+
+  const unbound = agent.capabilities
+    .filter((capability) => capability.enabled !== false)
+    .filter((capability) => !capability.skill?.id || !capability.skill.instructions?.trim());
+  if (unbound.length > 0) {
+    throw new Error(`A2A listing capabilities require a local skill binding with instructions: ${unbound.map((capability) => capability.id).join(', ')}`);
   }
 }
 
@@ -416,6 +424,7 @@ export async function agentCommand(command: ParsedCommand) {
     console.log(`service type: ${result.serviceType}`);
     console.log(`standard plugin source: ${result.standardPluginSource}`);
     console.log(`standard plugin installed: ${result.standardPluginInstalled ? 'yes' : 'no'}`);
+    console.log(`standard plugin configured: ${result.standardPluginConfigured ? 'yes' : 'no'}`);
     console.log(`standard a2a endpoint: ${result.localStandardA2aUrl}`);
     console.log(`momoai protected provider endpoint: ${result.localProtectedProviderUrl}`);
     console.log(`standard agent card: ${result.localAgentCardUrl}`);
