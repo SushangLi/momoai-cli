@@ -118,7 +118,8 @@ function marketCapabilityPayload(agent: ResolvedAgentConfig) {
       fixedTokens: Number(capability.fixedTokens || 1000),
       enabled: capability.enabled !== false,
       inputModes: capability.inputModes || ['text/plain', 'application/json'],
-      outputModes: capability.outputModes || ['text/plain']
+      outputModes: capability.outputModes || ['text/plain'],
+      ...(capability.formatContract ? { formatContract: capability.formatContract } : {})
     }));
 }
 

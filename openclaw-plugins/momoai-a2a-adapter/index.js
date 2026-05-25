@@ -35,6 +35,9 @@ function normalizeCapability(value, index) {
   const id = String(capability.id || capability.capability_id || capability.capabilityId || `capability_${index + 1}`).trim();
   const name = String(capability.name || id).trim();
   const fixedTokens = Number(capability.fixedTokens ?? capability.fixed_tokens ?? 1000);
+  const formatContract = isRecord(capability.formatContract || capability.format_contract)
+    ? capability.formatContract || capability.format_contract
+    : undefined;
   return {
     id,
     name,
@@ -42,7 +45,8 @@ function normalizeCapability(value, index) {
     fixedTokens: Number.isFinite(fixedTokens) && fixedTokens > 0 ? Math.floor(fixedTokens) : 1000,
     enabled: capability.enabled === undefined ? true : Boolean(capability.enabled),
     inputModes: normalizeModes(capability.inputModes || capability.input_modes, ['text/plain', 'application/json']),
-    outputModes: normalizeModes(capability.outputModes || capability.output_modes, ['text/plain'])
+    outputModes: normalizeModes(capability.outputModes || capability.output_modes, ['text/plain']),
+    ...(formatContract ? { formatContract } : {})
   };
 }
 
@@ -229,7 +233,8 @@ function renderMarketCapabilities(service) {
       enabled: true,
       sortOrder: index,
       inputModes: capability.inputModes,
-      outputModes: capability.outputModes
+      outputModes: capability.outputModes,
+      ...(capability.formatContract ? { formatContract: capability.formatContract } : {})
     }));
 }
 

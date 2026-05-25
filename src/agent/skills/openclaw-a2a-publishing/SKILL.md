@@ -20,6 +20,7 @@ Split the integration:
 5. Restart OpenClaw Gateway after plugin changes, or run the install command with `--restart`.
 6. For `websocket`, the CLI registers a provider node and writes `relayUrl` plus `providerToken` into OpenClaw config only when an `agent_id` is present. Without `agent_id`, it still configures local standard A2A and the MOMOAI adapter metadata. For `funnel`, publish/update the MOMOAI listing with `provider_runtime external` and `provider_url` set to the public MOMOAI protected provider endpoint.
 7. Only make the listing public after the standard A2A endpoint works locally and the MOMOAI provider node is online.
+8. For structured capabilities, declare `inputModes`, `outputModes`, and a MOMOAI `formatContract` in the capability config. Callers request the desired result media type with A2A `params.configuration.acceptedOutputModes`; the provider should return matching A2A parts such as `data` with `mimeType: application/json` or `text` for `text/plain`.
 
 ## Commands
 
@@ -28,6 +29,7 @@ Split the integration:
 - `$agent openclaw install-a2a --profile <profile> --agent-id <id> --service funnel --provider-url https://<public-host>/momoai/a2a/<profile> --standard-plugin-source <source> --restart`
 - If the public standard A2A plugin is already installed and working, add `--skip-standard-plugin`.
 - Use `--allow-unauthenticated` only for local protocol testing.
+- Test structured output with `$agent call <endpoint> '<input>' --capability <id> --output-mode application/json --json`.
 
 ## Notes
 
@@ -35,3 +37,4 @@ Split the integration:
 - Generic A2A skills should not contain MOMOAI pricing. Fixed `fixedTokens` values belong to MOMOAI listing/provider registration and the MOMOAI adapter market card.
 - The standard A2A endpoint remains usable by generic agents. The MOMOAI protected endpoint and WebSocket relay handler are for paid marketplace invocations.
 - Multiple OpenClaw services can coexist with distinct profiles and paths such as `/a2a/gomoku` plus `/momoai/a2a/gomoku`.
+- If curl is configured with a local proxy, use `--noproxy '*'` when testing `127.0.0.1` endpoints.

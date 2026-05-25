@@ -53,6 +53,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "formatContract": {
+            "type": "object",
+            "additionalProperties": true
           }
         },
         "required": [

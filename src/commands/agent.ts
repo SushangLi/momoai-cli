@@ -122,6 +122,14 @@ function outputModesFlag(command: ParsedCommand) {
   return modes.length ? modes : undefined;
 }
 
+function partTextForConsole(part: any) {
+  if (typeof part?.text === 'string') return part.text;
+  if (part?.data !== undefined) return JSON.stringify(part.data, null, 2);
+  if (part?.raw !== undefined) return JSON.stringify(part.raw, null, 2);
+  if (part?.file?.uri || part?.file?.url) return part.file.uri || part.file.url;
+  return '';
+}
+
 function localProfile(config: CliConfig, profileName?: string): ResolvedAgentConfig {
   if (!profileName || profileName === 'default') return resolveAgentConfig(config, profileName);
   try {
@@ -239,8 +247,15 @@ export async function agentCommand(command: ParsedCommand) {
     if (profileAction === 'set') {
       const normalizedProfile = normalizeProfileName(profileName);
       if (!normalizedProfile) throw new Error('Usage: $agent profile set <profile> [flags]');
-      const agent = agentWithFlags(config, { ...command, flags: command.flags });
-      saveAgentProfile(normalizedProfile, profileUpdateFromAgent({ ...agent, profile: normalizedProfile }, command));
+      const commandForProfile = {
+        ...command,
+        flags: {
+          ...command.flags,
+          profile: profileFlag(command) || normalizedProfile
+        }
+      };
+      const agent = agentWithFlags(config, commandForProfile);
+      saveAgentProfile(normalizedProfile, profileUpdateFromAgent({ ...agent, profile: normalizedProfile }, commandForProfile));
       console.log(`Agent profile saved: ${normalizedProfile}`);
       return;
     }
@@ -502,7 +517,7 @@ export async function agentCommand(command: ParsedCommand) {
     const payload = result as any;
     const message = payload?.kind === 'message' ? payload : payload?.status?.message;
     const text = Array.isArray(message?.parts)
-      ? message.parts.map((part: any) => part.text).filter(Boolean).join('\n')
+      ? message.parts.map(partTextForConsole).filter(Boolean).join('\n')
       : JSON.stringify(result, null, 2);
     console.log(text);
     return;

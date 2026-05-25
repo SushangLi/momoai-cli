@@ -67,6 +67,13 @@ function renderCapabilities(capabilities: AgentCapability[]) {
     }));
 }
 
+function aggregateModes(capabilities: AgentCapability[], key: 'inputModes' | 'outputModes', fallback: string[]) {
+  const modes = capabilities
+    .filter((capability) => capability.enabled !== false)
+    .flatMap((capability) => capability[key] || []);
+  return uniqueModes(modes, fallback);
+}
+
 function renderMarketCapabilities(capabilities: AgentCapability[]) {
   return capabilities
     .filter((capability) => capability.enabled !== false)
@@ -116,8 +123,8 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
           }]
         : [])
     ],
-    defaultInputModes: ['text/plain', 'application/json'],
-    defaultOutputModes: ['text/plain'],
+    defaultInputModes: aggregateModes(agent.capabilities, 'inputModes', ['text/plain', 'application/json']),
+    defaultOutputModes: aggregateModes(agent.capabilities, 'outputModes', ['text/plain']),
     capabilities: {
       streaming: false,
       pushNotifications: false,
