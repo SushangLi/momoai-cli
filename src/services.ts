@@ -1,10 +1,54 @@
 import { MomoClient } from './client.js';
 import type { ResolvedAgentConfig } from './config.js';
 
-export async function exploreAgents(query: string, limit = 10, authToken?: string) {
+export interface ExploreAgentsOptions {
+  scope?: 'agent' | 'capability';
+  inputMode?: string;
+  outputMode?: string;
+  maxFixedTokens?: number;
+  onlineOnly?: boolean;
+  agentId?: number;
+}
+
+export interface PlatformAgentCallOptions {
+  capabilityId?: string;
+  outputMode?: string | string[];
+  contextId?: string;
+  showPlan?: boolean;
+}
+
+function compactQuery(value: Record<string, string | number | boolean | undefined>) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== '')) as Record<string, string | number | boolean>;
+}
+
+function normalizeModes(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  return [...new Set(raw.map((mode) => String(mode || '').trim()).filter(Boolean))];
+}
+
+function mediaTypeMatches(accepted: string, actual: string) {
+  const left = accepted.trim().toLowerCase();
+  const right = actual.trim().toLowerCase();
+  if (!left || !right) return false;
+  if (left === '*/*' || left === right) return true;
+  const [leftType, leftSubtype] = left.split('/');
+  const [rightType] = right.split('/');
+  return leftSubtype === '*' && leftType === rightType;
+}
+
+export async function exploreAgents(query: string, limit = 10, authToken?: string, options: ExploreAgentsOptions = {}) {
   const response = await new MomoClient().request<any>('/api/cli/agents/search', {
     authToken,
-    query: { query, limit }
+    query: compactQuery({
+      query,
+      limit,
+      scope: options.scope,
+      input_mode: options.inputMode,
+      output_mode: options.outputMode,
+      max_fixed_tokens: options.maxFixedTokens,
+      online_only: options.onlineOnly,
+      agent_id: options.agentId
+    })
   });
   const agents = response.data?.agents || [];
   return agents.map((agent: any) => ({
@@ -12,7 +56,11 @@ export async function exploreAgents(query: string, limit = 10, authToken?: strin
     name: agent.name,
     price: `${agent.price}/${agent.price_unit}`,
     model: agent.model_call_name,
-    intro: agent.intro
+    intro: agent.intro,
+    ...(agent.online === undefined ? {} : { online: agent.online }),
+    ...(agent.agent_card_url ? { agent_card_url: agent.agent_card_url } : {}),
+    ...(agent.market_card_url ? { market_card_url: agent.market_card_url } : {}),
+    ...(agent.matched_capability ? { matched_capability: agent.matched_capability } : {})
   }));
 }
 
@@ -82,7 +130,76 @@ export async function exchangeSell(agentId: number, tokens: number, price: numbe
   };
 }
 
-export async function callPlatformAgent(agentId: number, content: string, authToken?: string) {
+function findCapability(cardOrMarket: any, capabilityId: string) {
+  const normalized = capabilityId.trim();
+  const skills = Array.isArray(cardOrMarket?.skills) ? cardOrMarket.skills : [];
+  const marketCapabilities = Array.isArray(cardOrMarket?.momoai_market?.capabilities)
+    ? cardOrMarket.momoai_market.capabilities
+    : [];
+  return [...skills, ...marketCapabilities].find((item: any) => String(item?.id || item?.capability_id || '').trim() === normalized);
+}
+
+async function validateA2aCapabilityCall(agentId: number, capabilityId: string, outputModes: string[], authToken?: string) {
+  const client = new MomoClient();
+  const card = await client.request<any>(`/a2a/agents/${agentId}`, { authToken });
+  const market = await client.request<any>(`/a2a/agents/${agentId}`, {
+    authToken,
+    query: { format: 'market' }
+  });
+  const skill = findCapability(card, capabilityId);
+  if (!skill) throw new Error(`A2A agent ${agentId} does not expose capability ${capabilityId} in its Agent Card.`);
+  const marketCapability = findCapability(market, capabilityId);
+  if (!marketCapability) throw new Error(`A2A agent ${agentId} does not expose capability ${capabilityId} in its Market Card.`);
+  if (marketCapability.enabled === false) throw new Error(`A2A capability ${capabilityId} is disabled.`);
+  if (market?.momoai_market?.online === false) throw new Error(`A2A agent ${agentId} is offline.`);
+
+  const supported = Array.isArray(marketCapability.outputModes)
+    ? marketCapability.outputModes
+    : Array.isArray(marketCapability.output_modes)
+      ? marketCapability.output_modes
+      : Array.isArray(skill.outputModes)
+        ? skill.outputModes
+        : Array.isArray(skill.output_modes) ? skill.output_modes : ['text/plain'];
+  const unsupported = outputModes.filter((mode) => !supported.some((item: string) => mediaTypeMatches(mode, String(item))));
+  if (unsupported.length) {
+    throw new Error(`A2A capability ${capabilityId} does not support output mode: ${unsupported.join(', ')}`);
+  }
+}
+
+export async function callPlatformAgent(agentId: number, content: string, authToken?: string, options: PlatformAgentCallOptions = {}) {
+  const capabilityId = options.capabilityId?.trim();
+  if (capabilityId) {
+    const outputModes = normalizeModes(options.outputMode);
+    await validateA2aCapabilityCall(agentId, capabilityId, outputModes, authToken);
+    const response = await new MomoClient().request<any>(`/a2a/agents/${agentId}`, {
+      authToken,
+      body: {
+        jsonrpc: '2.0',
+        id: `cli_${Date.now()}`,
+        method: 'message/send',
+        params: {
+          message: {
+            messageId: `cli_msg_${Date.now()}`,
+            role: 'user',
+            parts: [{ text: content, mediaType: 'text/plain' }]
+          },
+          ...(outputModes.length ? { configuration: { acceptedOutputModes: outputModes } } : {}),
+          metadata: {
+            capability_id: capabilityId,
+            ...(options.contextId ? { contextId: options.contextId } : {}),
+            ...(options.showPlan === undefined ? {} : { showPlan: options.showPlan })
+          }
+        }
+      }
+    });
+    if (response.error) throw new Error(response.error.message || 'A2A capability call failed');
+    return {
+      agent: agentId,
+      capability_id: capabilityId,
+      task: response.result || response
+    };
+  }
+
   const response = await new MomoClient().request<any>('/v1/chat/completions', {
     authToken,
     body: {

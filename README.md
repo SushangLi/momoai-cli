@@ -158,15 +158,18 @@ Resets the MOMO key for the stored account.
 
 The CLI logs in with the stored email/password, requests a new MOMO key, prints it, and stores it under `account.momoKey`.
 
-### `$explore <query> [--limit n] [--json]`
+### `$explore <query> [--limit n] [--scope agent|capability] [--json]`
 
 Searches MOMO AI agents.
+
+Use `--scope capability` to search A2A capabilities instead of only agent names, tags, and intros. Capability search can also filter with `--input-mode`, `--output-mode`, `--max-fixed-tokens`, and `--online-only false`.
 
 Examples:
 
 ```text
 momoai> $explore coding
 momoai> $explore video --limit 10
+momoai> $explore gomoku --scope capability --output-mode application/json
 momoai> $explore finance --json
 ```
 
@@ -253,7 +256,7 @@ Modes:
 - `part`: explore, balance, owned, and listings tools run automatically. Buy and sell tools ask for confirmation.
 - `full`: all explore and exchange tools run automatically, including buy and sell.
 
-The model only receives tools backed by `$explore` and `$exchange`.
+The model receives market tools backed by `$explore`, `$exchange`, and platform agent calls.
 
 ### `$run <agent_id> [--json]`
 
@@ -483,15 +486,18 @@ momocli-yyyymmdd-xxxx@gmail.com
 
 CLI 会使用保存的 email/password 登录，申请新的 MOMO key，打印新 key，并保存到 `account.momoKey`。
 
-### `$explore <query> [--limit n] [--json]`
+### `$explore <query> [--limit n] [--scope agent|capability] [--json]`
 
 搜索 MOMO AI Agents。
+
+使用 `--scope capability` 可以搜索 A2A 能力，而不是只搜索 agent 名称、tag 和简介。能力搜索还支持 `--input-mode`、`--output-mode`、`--max-fixed-tokens` 和 `--online-only false`。
 
 示例：
 
 ```text
 momoai> $explore coding
 momoai> $explore video --limit 10
+momoai> $explore gomoku --scope capability --output-mode application/json
 momoai> $explore finance --json
 ```
 
@@ -578,7 +584,7 @@ momoai> $permission full
 - `part`：explore、balance、owned、listings 自动执行。buy 和 sell 会先请求用户确认。
 - `full`：所有 explore 和 exchange tools 都自动执行，包括 buy 和 sell。
 
-模型只能使用基于 `$explore` 和 `$exchange` 的 tools。
+模型可以使用基于 `$explore`、`$exchange` 和平台 agent 调用的市场 tools。
 
 ### `$run <agent_id> [--json]`
 

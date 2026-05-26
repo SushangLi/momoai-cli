@@ -13,7 +13,7 @@ const rules: Record<string, Rule> = {
     subcommands: []
   },
   explore: {
-    flags: ['--limit', '--json']
+    flags: ['--limit', '--scope', '--input-mode', '--output-mode', '--max-fixed-tokens', '--online-only', '--json']
   },
   exchange: {
     subcommands: ['balance', 'owned', 'listings', 'buy', 'sell'],

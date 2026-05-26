@@ -11,12 +11,18 @@ export const momoTools = [
     type: 'function',
     function: {
       name: 'explore_agents',
-      description: 'Search MOMO AI agents by query.',
+      description: 'Search MOMOAI agents. Use scope=capability when the user needs an agent that can perform a specific A2A capability.',
       parameters: {
         type: 'object',
         properties: {
           query: { type: 'string' },
-          limit: { type: 'number', default: 10 }
+          limit: { type: 'number', default: 10 },
+          scope: { type: 'string', enum: ['agent', 'capability'], default: 'agent' },
+          input_mode: { type: 'string', description: 'Required input media type when scope=capability, for example text/plain or application/json.' },
+          output_mode: { type: 'string', description: 'Required output media type when scope=capability, for example text/plain or application/json.' },
+          max_fixed_tokens: { type: 'number', description: 'Maximum fixed result-token price when scope=capability.' },
+          online_only: { type: 'boolean', default: true, description: 'Only return A2A agents with an online provider when scope=capability.' },
+          agent_id: { type: 'number', description: 'Limit capability search to one A2A agent.' }
         },
         required: ['query']
       }
@@ -87,12 +93,16 @@ export const momoTools = [
     type: 'function',
     function: {
       name: 'call_platform_agent',
-      description: 'Call another MOMOAI market agent. During remote service execution, the original caller pays for this child agent call.',
+      description: 'Call another MOMOAI market agent. With capability_id, call its standard A2A capability; otherwise use the legacy chat completion path.',
       parameters: {
         type: 'object',
         properties: {
           agent_id: { type: 'number' },
-          content: { type: 'string' }
+          content: { type: 'string' },
+          capability_id: { type: 'string', description: 'A2A capability id to call, selected from explore_agents scope=capability results.' },
+          output_mode: { type: 'string', description: 'Requested A2A output media type, for example application/json.' },
+          context_id: { type: 'string' },
+          show_plan: { type: 'boolean' }
         },
         required: ['agent_id', 'content']
       }
@@ -472,7 +482,14 @@ export async function executeToolCall(
 
   try {
     if (name === 'explore_agents') {
-      return await exploreAgents(String(args.query || ''), Number(args.limit || 10), options.authToken);
+      return await exploreAgents(String(args.query || ''), Number(args.limit || 10), options.authToken, {
+        scope: args.scope === 'capability' ? 'capability' : 'agent',
+        inputMode: typeof args.input_mode === 'string' ? args.input_mode : typeof args.inputMode === 'string' ? args.inputMode : undefined,
+        outputMode: typeof args.output_mode === 'string' ? args.output_mode : typeof args.outputMode === 'string' ? args.outputMode : undefined,
+        maxFixedTokens: args.max_fixed_tokens === undefined ? undefined : Number(args.max_fixed_tokens),
+        onlineOnly: args.online_only === undefined ? undefined : Boolean(args.online_only),
+        agentId: args.agent_id === undefined ? undefined : intArg(args, 'agent_id')
+      });
     }
     if (name === 'exchange_balance') return await exchangeBalance(options.authToken);
     if (name === 'exchange_owned') return await exchangeOwned(options.authToken);
@@ -487,7 +504,12 @@ export async function executeToolCall(
       return await exchangeSell(intArg(args, 'agent_id'), numberArg(args, 'tokens'), numberArg(args, 'price'), options.authToken);
     }
     if (name === 'call_platform_agent') {
-      return await callPlatformAgent(intArg(args, 'agent_id'), String(args.content || ''), options.authToken);
+      return await callPlatformAgent(intArg(args, 'agent_id'), String(args.content || ''), options.authToken, {
+        capabilityId: typeof args.capability_id === 'string' ? args.capability_id : typeof args.capabilityId === 'string' ? args.capabilityId : undefined,
+        outputMode: typeof args.output_mode === 'string' ? args.output_mode : typeof args.outputMode === 'string' ? args.outputMode : undefined,
+        contextId: typeof args.context_id === 'string' ? args.context_id : typeof args.contextId === 'string' ? args.contextId : undefined,
+        showPlan: args.show_plan === undefined && args.showPlan === undefined ? undefined : Boolean(args.show_plan ?? args.showPlan)
+      });
     }
     if (name === 'publish_local_agent_listing') {
       const agent = agentForTool(args);

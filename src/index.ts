@@ -22,8 +22,8 @@ const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'permis
 
 function help() {
   console.log(`Commands:
-  $register
-  $explore <query> [--limit n] [--json]
+	  $register
+	  $explore <query> [--limit n] [--scope agent|capability] [--output-mode mime] [--json]
   $exchange balance [--json]
   $exchange owned [--json]
   $exchange listings [--agent <agent_id>] [--json]
