@@ -15,7 +15,17 @@ export interface AgentCapability {
   inputModes?: string[];
   outputModes?: string[];
   formatContract?: Record<string, unknown>;
+  handler?: AgentCapabilityHandler;
   skill?: AgentCapabilitySkill;
+}
+
+export interface AgentCapabilityHandler {
+  type?: 'http';
+  path: string;
+  timeoutSeconds?: number;
+  pluginId?: string;
+  pluginSource?: string;
+  pluginConfig?: Record<string, unknown>;
 }
 
 export interface AgentCapabilitySkill {
@@ -23,6 +33,7 @@ export interface AgentCapabilitySkill {
   name?: string;
   description?: string;
   instructions: string;
+  handler?: AgentCapabilityHandler;
 }
 
 export interface AgentListingConfig {
@@ -214,6 +225,7 @@ function parseCapabilities(value: string | undefined): AgentCapability[] | undef
         inputModes: normalizeModes(capability.inputModes || capability.input_modes),
         outputModes: normalizeModes(capability.outputModes || capability.output_modes),
         formatContract: normalizeFormatContract(capability.formatContract || capability.format_contract),
+        handler: normalizeCapabilityHandler(capability.handler || capability.localHandler || capability.local_handler),
         skill: normalizeCapabilitySkill(capability)
       }))
       .filter((capability) => capability.id && capability.name);
@@ -231,6 +243,26 @@ function normalizeModes(value: unknown): string[] | undefined {
 function normalizeFormatContract(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   return value as Record<string, unknown>;
+}
+
+function normalizeCapabilityHandler(value: unknown): AgentCapabilityHandler | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const handler = value as Record<string, unknown>;
+  const type = String(handler.type || 'http').trim().toLowerCase();
+  const path = String(handler.path || handler.url || handler.endpoint || '').trim();
+  if (type !== 'http' || !path) return undefined;
+  const timeoutSeconds = Number(handler.timeoutSeconds || handler.timeout_seconds);
+  const pluginId = String(handler.pluginId || handler.plugin_id || '').trim();
+  const pluginSource = String(handler.pluginSource || handler.plugin_source || '').trim();
+  const pluginConfig = normalizeFormatContract(handler.pluginConfig || handler.plugin_config || handler.config);
+  return {
+    type: 'http',
+    path,
+    ...(Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? { timeoutSeconds: Math.floor(timeoutSeconds) } : {}),
+    ...(pluginId ? { pluginId } : {}),
+    ...(pluginSource ? { pluginSource } : {}),
+    ...(pluginConfig ? { pluginConfig } : {})
+  };
 }
 
 export function normalizeCapabilitySkill(capability: any): AgentCapabilitySkill | undefined {
@@ -270,7 +302,8 @@ export function normalizeCapabilitySkill(capability: any): AgentCapabilitySkill 
     id,
     ...(name ? { name } : {}),
     ...(description ? { description } : {}),
-    instructions
+    instructions,
+    ...(normalizeCapabilityHandler(skill.handler || skill.localHandler || skill.local_handler) ? { handler: normalizeCapabilityHandler(skill.handler || skill.localHandler || skill.local_handler) } : {})
   };
 }
 
@@ -288,6 +321,7 @@ function normalizeCapabilities(value: unknown): AgentCapability[] {
       inputModes: normalizeModes(capability?.inputModes || capability?.input_modes),
       outputModes: normalizeModes(capability?.outputModes || capability?.output_modes),
       formatContract: normalizeFormatContract(capability?.formatContract || capability?.format_contract),
+      handler: normalizeCapabilityHandler(capability?.handler || capability?.localHandler || capability?.local_handler),
       skill: normalizeCapabilitySkill(capability)
     }))
     .filter((capability) => capability.id && capability.name);

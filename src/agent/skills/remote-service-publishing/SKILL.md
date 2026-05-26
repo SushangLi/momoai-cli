@@ -26,7 +26,7 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 ## Workflow
 
 1. Plan before acting. Identify the target profile, public name, description, capabilities, each capability's bound local skill, fixed result-token prices, and whether the service should remain delisted.
-2. Confirm every enabled capability has a stable `id`, user-facing `name`, concise `description`, positive `fixedTokens`, and a `skill` object with `id` plus executable `instructions`. Also set capability `inputModes`, `outputModes`, and `formatContract` when callers need structured results instead of free-form text.
+2. Confirm every enabled capability has a stable `id`, user-facing `name`, concise `description`, positive `fixedTokens`, and a `skill` object with `id` plus executable `instructions`. Also set capability `inputModes`, `outputModes`, and `formatContract` when callers need structured results instead of free-form text. Deterministic or domain-specific behavior belongs in the agent profile's local handler/plugin config, not in the standard A2A communication plugin or MOMOAI market adapter.
 3. Create or update the profile locally.
 4. Publish with `publish_local_agent_listing` or `$agent publish`; this creates a delisted draft first.
 5. Choose a service type:

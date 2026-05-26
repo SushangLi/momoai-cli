@@ -1,0 +1,19 @@
+{
+  "name": "@momoai/openclaw-gomoku-a2a-handler",
+  "version": "0.1.0",
+  "description": "Local Gomoku move response handler for OpenClaw A2A services.",
+  "type": "module",
+  "peerDependencies": {
+    "openclaw": ">=2026.5.22"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

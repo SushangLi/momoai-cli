@@ -90,11 +90,37 @@
           },
           "skill": {
             "$ref": "#/$defs/skill"
+          },
+          "handler": {
+            "$ref": "#/$defs/localHandler"
           }
         },
         "required": [
           "capabilityId",
           "skill"
+        ]
+      },
+      "localHandler": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "http"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeoutSeconds": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "path"
         ]
       },
       "service": {

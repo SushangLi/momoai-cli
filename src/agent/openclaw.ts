@@ -146,22 +146,58 @@ function standardA2aSkills(agent: ResolvedAgentConfig) {
 function standardA2aSkillBindings(agent: ResolvedAgentConfig) {
   return agent.capabilities
     .filter((capability) => capability.enabled !== false)
-    .map((capability) => ({
-      capabilityId: capability.id,
-      capabilityName: capability.name,
-      capabilityDescription: capability.description || '',
-      inputModes: capability.inputModes || ['text/plain', 'application/json'],
-      outputModes: capability.outputModes || ['text/plain'],
-      skill: capability.skill
-        ? {
-            id: capability.skill.id,
-            name: capability.skill.name || capability.skill.id,
-            description: capability.skill.description || '',
-            instructions: capability.skill.instructions
+    .map((capability) => {
+      const handler = capability.skill?.handler || capability.handler;
+      return {
+        capabilityId: capability.id,
+        capabilityName: capability.name,
+        capabilityDescription: capability.description || '',
+        inputModes: capability.inputModes || ['text/plain', 'application/json'],
+        outputModes: capability.outputModes || ['text/plain'],
+        ...(handler ? {
+          handler: {
+            type: handler.type || 'http',
+            path: handler.path,
+            ...(handler.timeoutSeconds ? { timeoutSeconds: handler.timeoutSeconds } : {})
           }
-        : undefined
-    }))
+        } : {}),
+        skill: capability.skill
+          ? {
+              id: capability.skill.id,
+              name: capability.skill.name || capability.skill.id,
+              description: capability.skill.description || '',
+              instructions: capability.skill.instructions
+            }
+          : undefined
+      };
+    })
     .filter((binding) => binding.skill?.id && binding.skill.instructions?.trim());
+}
+
+function handlerPluginEntries(agent: ResolvedAgentConfig) {
+  const entries = new Map<string, { source: string; config?: Record<string, unknown> }>();
+  for (const capability of agent.capabilities) {
+    const handler = capability.skill?.handler || capability.handler;
+    if (!handler?.pluginId || !handler.pluginSource) continue;
+    entries.set(handler.pluginId, {
+      source: handler.pluginSource,
+      ...(handler.pluginConfig ? { config: handler.pluginConfig } : {})
+    });
+  }
+  return entries;
+}
+
+function handlerPluginPatch(agent: ResolvedAgentConfig) {
+  const entries = Object.fromEntries(Array.from(handlerPluginEntries(agent)).map(([pluginId, plugin]) => [
+    pluginId,
+    {
+      enabled: true,
+      ...(plugin.config ? { config: plugin.config } : {})
+    }
+  ]));
+  return Object.keys(entries).length
+    ? { plugins: { entries } }
+    : undefined;
 }
 
 function standardA2aPatch(agent: ResolvedAgentConfig, options: {
@@ -372,6 +408,16 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
       agentCardPath
     }), null, 2)}\n`);
     standardPluginConfigured = true;
+  }
+
+  const handlerPlugins = handlerPluginEntries(agent);
+  for (const plugin of handlerPlugins.values()) {
+    await access(plugin.source);
+    await execOpenClaw(openclawBin, ['plugins', 'install', plugin.source, '--force']);
+  }
+  const handlerPatch = handlerPluginPatch(agent);
+  if (handlerPatch) {
+    await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(handlerPatch, null, 2)}\n`);
   }
 
   const adapterRoot = adapterPluginPath();

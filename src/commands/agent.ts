@@ -94,6 +94,7 @@ function parseCapabilities(value: string): AgentCapability[] {
     inputModes: normalizeModes(capability.inputModes || capability.input_modes),
     outputModes: normalizeModes(capability.outputModes || capability.output_modes),
     formatContract: capability.formatContract || capability.format_contract,
+    handler: capability.handler || capability.localHandler || capability.local_handler,
     skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('--capabilities must include at least one capability with id and name.');

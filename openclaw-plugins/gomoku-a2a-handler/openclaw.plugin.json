@@ -1,0 +1,26 @@
+{
+  "id": "momoai-gomoku-a2a-handler",
+  "name": "MOMOAI Gomoku A2A Handler",
+  "description": "Provides a local OpenClaw response handler for a Gomoku move capability.",
+  "activation": {
+    "onStartup": true,
+    "onConfigPaths": [
+      "plugins.entries.momoai-gomoku-a2a-handler"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "type": "string",
+        "minLength": 1
+      },
+      "defaultBoardSize": {
+        "type": "number",
+        "minimum": 5,
+        "maximum": 50
+      }
+    }
+  }
+}
