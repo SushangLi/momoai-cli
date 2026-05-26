@@ -44,7 +44,7 @@ function agentCardUrl(mode: AgentMode, localBaseUrl: string | undefined, agentId
 }
 
 function marketCardUrl(mode: AgentMode, localBaseUrl: string | undefined, agentId?: number, agent?: ResolvedAgentConfig) {
-  if (mode === 'remote_service') return remoteServiceUrl(agentId, agent);
+  if (mode === 'remote_service') return `${remoteServiceUrl(agentId, agent)}?format=market`;
   return `${localBaseAgentUrl(localBaseUrl, agent)}/.well-known/momoai-a2a/market-card.json`;
 }
 
@@ -97,29 +97,22 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
   const url = mode === 'remote_service'
     ? remoteServiceUrl(options.agentId, options.agent)
     : localA2aUrl(options.localBaseUrl, options.agent);
-  const baseUrl = mode === 'remote_service'
-    ? url
-    : localBaseAgentUrl(options.localBaseUrl, options.agent);
   const skills = renderCapabilities(agent.capabilities);
   return {
     name: agent.name,
     description: agent.description,
     version: agent.version,
-    url,
-    mode,
-    preferredTransport: 'JSONRPC',
-    protocolVersion: '1.0.0',
     supportedInterfaces: [
       {
-        transport: 'JSON-RPC',
-        url,
-        contentTypes: ['application/json']
+        protocolBinding: 'JSONRPC',
+        protocolVersion: '1.0.0',
+        url
       },
       ...(mode === 'local'
         ? [{
-            transport: 'HTTP+JSON',
-            url: baseUrl,
-            contentTypes: ['application/json']
+            protocolBinding: 'HTTP+JSON',
+            protocolVersion: '1.0.0',
+            url
           }]
         : [])
     ],
@@ -128,23 +121,24 @@ export function buildAgentCard(options: AgentCardOptions = {}) {
     capabilities: {
       streaming: false,
       pushNotifications: false,
-      stateTransitionHistory: true
+      extendedAgentCard: false
     },
     ...(mode === 'remote_service'
       ? {
           securitySchemes: {
             platformInvocationJwt: {
-              type: 'http',
-              scheme: 'bearer',
-              bearerFormat: 'JWT',
-              description: 'Short-lived MOMOAI platform invocation JWT. Remote service calls must be authorized and routed by the MOMOAI platform gateway.'
+              httpAuthSecurityScheme: {
+                scheme: 'Bearer',
+                bearerFormat: 'JWT',
+                description: 'Short-lived MOMOAI platform invocation JWT. Remote service calls must be authorized and routed by the MOMOAI platform gateway.'
+              }
             }
           },
-          security: [{ platformInvocationJwt: [] }]
+          securityRequirements: [{ schemes: { platformInvocationJwt: [] } }]
         }
       : {
           securitySchemes: {},
-          security: []
+          securityRequirements: []
         }),
     skills
   };
@@ -183,14 +177,15 @@ export function buildMarketCard(options: AgentCardOptions = {}) {
     securitySchemes: mode === 'remote_service'
       ? {
           platformInvocationJwt: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-            description: 'Short-lived MOMOAI invocation JWT for paid platform-routed calls.'
+            httpAuthSecurityScheme: {
+              scheme: 'Bearer',
+              bearerFormat: 'JWT',
+              description: 'Short-lived MOMOAI invocation JWT for paid platform-routed calls.'
+            }
           }
-        }
-      : {},
-    security: mode === 'remote_service' ? [{ platformInvocationJwt: [] }] : []
+      }
+    : {},
+    securityRequirements: mode === 'remote_service' ? [{ schemes: { platformInvocationJwt: [] } }] : []
   };
 }
 
@@ -203,7 +198,7 @@ export function buildOasfRecord(options: AgentCardOptions = {}) {
     version: card.version,
     locator: {
       type: 'a2a',
-      url: card.url
+      url: (card.supportedInterfaces?.[0] as any)?.url
     },
     modules: [
       {

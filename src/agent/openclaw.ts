@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MomoClient } from '../client.js';
-import { buildAgentCard, buildOasfRecord } from './card.js';
+import { buildAgentCard } from './card.js';
 import type { AgentServiceType, ResolvedAgentConfig } from '../config.js';
 
 interface InstallOpenClawA2aOptions {
@@ -146,31 +146,21 @@ function standardA2aSkills(agent: ResolvedAgentConfig) {
 function standardA2aSkillBindings(agent: ResolvedAgentConfig) {
   return agent.capabilities
     .filter((capability) => capability.enabled !== false)
-    .map((capability) => {
-      const handler = capability.skill?.handler || capability.handler;
-      return {
-        capabilityId: capability.id,
-        capabilityName: capability.name,
-        capabilityDescription: capability.description || '',
-        inputModes: capability.inputModes || ['text/plain', 'application/json'],
-        outputModes: capability.outputModes || ['text/plain'],
-        ...(handler ? {
-          handler: {
-            type: handler.type || 'http',
-            path: handler.path,
-            ...(handler.timeoutSeconds ? { timeoutSeconds: handler.timeoutSeconds } : {})
+    .map((capability) => ({
+      capabilityId: capability.id,
+      capabilityName: capability.name,
+      capabilityDescription: capability.description || '',
+      inputModes: capability.inputModes || ['text/plain', 'application/json'],
+      outputModes: capability.outputModes || ['text/plain'],
+      skill: capability.skill
+        ? {
+            id: capability.skill.id,
+            name: capability.skill.name || capability.skill.id,
+            description: capability.skill.description || '',
+            instructions: capability.skill.instructions
           }
-        } : {}),
-        skill: capability.skill
-          ? {
-              id: capability.skill.id,
-              name: capability.skill.name || capability.skill.id,
-              description: capability.skill.description || '',
-              instructions: capability.skill.instructions
-            }
-          : undefined
-      };
-    })
+        : undefined
+    }))
     .filter((binding) => binding.skill?.id && binding.skill.instructions?.trim());
 }
 
@@ -291,7 +281,6 @@ async function registerOpenClawProvider(agent: ResolvedAgentConfig, options: {
   }
 
   const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
-  const oasf = buildOasfRecord({ mode: 'remote_service', agentId, agent });
   const capabilities = providerCapabilityPayload(agent);
   const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
     body: {
@@ -299,7 +288,6 @@ async function registerOpenClawProvider(agent: ResolvedAgentConfig, options: {
       service_type: options.serviceType,
       ...(options.serviceType === 'funnel' ? { provider_url: options.providerUrl } : {}),
       card,
-      oasf,
       capabilities,
       market_capabilities: capabilities
     }
@@ -319,7 +307,7 @@ function looksLikeAgentCard(value: any) {
     value &&
       typeof value === 'object' &&
       typeof value.name === 'string' &&
-      typeof value.url === 'string' &&
+      Array.isArray(value.supportedInterfaces) &&
       Array.isArray(value.skills)
   );
 }

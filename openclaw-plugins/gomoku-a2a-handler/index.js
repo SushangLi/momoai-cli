@@ -432,16 +432,48 @@ function gomokuParts(result, text, acceptedModes) {
   const modes = normalizeModes(acceptedModes, []);
   const parts = [];
   if (wantsOutputMode(modes, 'application/json', true)) {
-    parts.push({ kind: 'data', data: result, mimeType: 'application/json' });
+    parts.push({ data: result, mediaType: 'application/json' });
   }
   if (wantsOutputMode(modes, 'text/plain', true)) {
-    parts.push({ kind: 'text', text });
+    parts.push({ text, mediaType: 'text/plain' });
   }
-  return parts.length ? parts : [{ kind: 'text', text }];
+  return parts.length ? parts : [{ text, mediaType: 'text/plain' }];
 }
 
 function handlerPath(pluginConfig) {
   return normalizePath(pluginConfig?.path, '/momoai/a2a-handlers/gomoku');
+}
+
+function localRuntimeRegistry() {
+  const key = Symbol.for('openclaw.a2a.localRuntime.v1');
+  if (!globalThis[key]) {
+    const handlers = new Map();
+    globalThis[key] = {
+      register(capabilityId, handler) {
+        handlers.set(String(capabilityId || '').trim(), handler);
+        return () => handlers.delete(String(capabilityId || '').trim());
+      },
+      async execute(input) {
+        const handler = handlers.get(String(input?.capabilityId || '').trim()) ||
+          handlers.get(String(input?.skill?.id || '').trim());
+        return handler ? handler(input) : undefined;
+      }
+    };
+  }
+  return globalThis[key];
+}
+
+function buildGomokuResponse(body, fallbackBoardSize) {
+  const result = recommendGomokuMove(extractGomokuPayload(body, fallbackBoardSize));
+  const text = gomokuResultText(result);
+  const parts = gomokuParts(result, text, body?.acceptedOutputModes);
+  return {
+    artifactName: 'gomoku_move',
+    parts,
+    metadata: {
+      mediaType: parts.some((part) => part.data !== undefined) ? 'application/json' : 'text/plain'
+    }
+  };
 }
 
 export default definePluginEntry({
@@ -451,6 +483,7 @@ export default definePluginEntry({
   register(api) {
     const path = handlerPath(api.pluginConfig);
     const fallbackBoardSize = normalizeBoardSize(api.pluginConfig?.defaultBoardSize, 15);
+    localRuntimeRegistry().register('gomoku_move', (body) => buildGomokuResponse(body, fallbackBoardSize));
     api.registerHttpRoute({
       path,
       auth: 'plugin',
@@ -462,17 +495,7 @@ export default definePluginEntry({
           return true;
         }
         try {
-          const body = await readJson(req);
-          const result = recommendGomokuMove(extractGomokuPayload(body, fallbackBoardSize));
-          const text = gomokuResultText(result);
-          const parts = gomokuParts(result, text, body?.acceptedOutputModes);
-          sendJson(res, 200, {
-            artifactName: 'gomoku_move',
-            parts,
-            metadata: {
-              mimeType: parts.some((part) => part.kind === 'data') ? 'application/json' : 'text/plain'
-            }
-          });
+          sendJson(res, 200, buildGomokuResponse(await readJson(req), fallbackBoardSize));
         } catch (error) {
           sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
         }

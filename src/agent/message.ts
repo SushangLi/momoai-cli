@@ -40,14 +40,20 @@ function labeledBlock(label: string, value: unknown) {
 
 function filePartToText(part: A2aMessagePart) {
   const file = isRecord(part.file) ? part.file : part;
-  const name = typeof file.name === 'string' && file.name ? file.name : 'unnamed';
-  const mimeType = typeof file.mimeType === 'string' && file.mimeType ? file.mimeType : 'application/octet-stream';
+  const name = typeof file.filename === 'string' && file.filename
+    ? file.filename
+    : typeof file.name === 'string' && file.name ? file.name : 'unnamed';
+  const mimeType = typeof file.mediaType === 'string' && file.mediaType
+    ? file.mediaType
+    : typeof file.media_type === 'string' && file.media_type
+      ? file.media_type
+      : typeof file.mimeType === 'string' && file.mimeType ? file.mimeType : 'application/octet-stream';
   const uri = typeof file.uri === 'string' && file.uri ? file.uri : typeof file.url === 'string' && file.url ? file.url : undefined;
   if (uri) {
     return `[file: ${name}; mimeType=${mimeType}; uri=${uri}]`;
   }
 
-  const bytes = typeof file.bytes === 'string' ? file.bytes : undefined;
+  const bytes = typeof file.raw === 'string' ? file.raw : (typeof file.bytes === 'string' ? file.bytes : undefined);
   if (!bytes) return `[file: ${name}; mimeType=${mimeType}]`;
   const decoded = decodeTextBytes(bytes, mimeType);
   if (decoded !== undefined) return `[file: ${name}; mimeType=${mimeType}]\n${decoded}`;
@@ -57,7 +63,7 @@ function filePartToText(part: A2aMessagePart) {
 function partToText(part: A2aMessagePart) {
   const kind = String(part.kind || part.type || '').toLowerCase();
   if (typeof part.text === 'string') return part.text.trim();
-  if (kind === 'file' || part.file || part.bytes || part.uri || part.url) return filePartToText(part);
+  if (kind === 'file' || part.file || part.bytes || part.raw || part.uri || part.url) return filePartToText(part);
   if (kind === 'data' || part.data !== undefined) return labeledBlock('data', part.data);
   if (part.raw !== undefined) return labeledBlock('raw', part.raw);
   return '';

@@ -1,5 +1,5 @@
 import express from 'express';
-import { buildAgentCard, buildMarketCard, buildOasfRecord } from './card.js';
+import { buildAgentCard, buildMarketCard } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import type { InvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
@@ -42,11 +42,18 @@ function jsonRpcError(id: JsonRpcRequest['id'], code: number, message: string, d
 }
 
 function taskResult(task: StoredTask) {
+  const states: Record<TaskState, string> = {
+    submitted: 'TASK_STATE_SUBMITTED',
+    working: 'TASK_STATE_WORKING',
+    completed: 'TASK_STATE_COMPLETED',
+    canceled: 'TASK_STATE_CANCELED',
+    failed: 'TASK_STATE_FAILED'
+  };
   return {
     id: task.id,
     contextId: task.contextId,
     status: {
-      state: task.state,
+      state: states[task.state],
       ...(task.result ? { message: task.result } : {}),
       ...(task.error ? { error: task.error } : {})
     }
@@ -109,7 +116,7 @@ async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent
     task.state = 'completed';
     task.result = {
       role: 'agent',
-      parts: [{ kind: 'text', text: result.content }],
+      parts: [{ text: result.content, mediaType: 'text/plain' }],
       metadata: {
         contextId: result.contextId,
         mode,
@@ -168,10 +175,6 @@ export async function startAgentServer(options: {
 
   app.get('/.well-known/agent-card.json', (_request, response) => {
     response.json(buildAgentCard({ mode: options.mode, agent }));
-  });
-
-  app.get('/.well-known/oasf-record.json', (_request, response) => {
-    response.json(buildOasfRecord({ mode: options.mode, agent }));
   });
 
   app.get('/.well-known/momoai-a2a/market-card.json', (_request, response) => {

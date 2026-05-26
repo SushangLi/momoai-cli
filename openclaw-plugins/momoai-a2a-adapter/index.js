@@ -558,14 +558,6 @@ function registerService(api, service) {
     sendJson(res, 200, buildMarketCard(req, service));
     return true;
   });
-  registerJsonRoute(api, service.oasfPath, async (req, res) => {
-    if (req.method !== 'GET') {
-      sendJson(res, 405, { error: 'Method not allowed' });
-      return true;
-    }
-    sendJson(res, 200, buildOasfRecord(req, service));
-    return true;
-  });
   registerJsonRoute(api, service.protectedPath, createProtectedHandler(service));
   if (service.serviceType === 'websocket') api.registerService(createRelayService(service));
   api.logger.info?.(`[momoai-a2a-adapter] registered ${service.id}: ${service.protectedPath} -> ${service.upstreamPath}`);

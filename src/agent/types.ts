@@ -34,14 +34,23 @@ export interface A2aMessagePart {
   bytes?: string;
   uri?: string;
   url?: string;
+  mediaType?: string;
+  media_type?: string;
   mimeType?: string;
+  mime_type?: string;
   name?: string;
+  filename?: string;
   file?: {
     bytes?: string;
+    raw?: string;
     uri?: string;
     url?: string;
+    mediaType?: string;
+    media_type?: string;
     mimeType?: string;
+    mime_type?: string;
     name?: string;
+    filename?: string;
   };
   metadata?: Record<string, unknown>;
 }

@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { MomoClient } from '../client.js';
 import { loadConfig } from '../config.js';
-import { buildAgentCard, buildOasfRecord } from './card.js';
+import { buildAgentCard } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import { startAgentServer } from './server.js';
@@ -96,7 +96,6 @@ async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: 
   const agentId = agent.agentId;
   if (!agentId) throw new Error('Remote service provider requires an agent id.');
   const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
-  const oasf = buildOasfRecord({ mode: 'remote_service', agentId, agent });
   const capabilities = marketCapabilities(agent);
   const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
     body: {
@@ -104,7 +103,6 @@ async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: 
       service_type: agent.serviceType,
       ...(agent.serviceType === 'funnel' ? { provider_url: funnelEndpoint(agent, allowLocalFallback) } : {}),
       card,
-      oasf,
       capabilities,
       market_capabilities: capabilities
     }
@@ -150,10 +148,10 @@ async function executeProviderInvocation(invocation: ProviderInvocation, agent: 
       id: invocation.run_id,
       contextId: result.contextId,
       status: {
-        state: 'completed',
+        state: 'TASK_STATE_COMPLETED',
         message: {
           role: 'agent',
-          parts: [{ kind: 'text', text: result.content }],
+          parts: [{ text: result.content, mediaType: 'text/plain' }],
           metadata: {
             contextId: result.contextId,
             mode: 'remote_service',

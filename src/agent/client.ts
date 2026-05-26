@@ -36,13 +36,21 @@ export async function resolveA2aEndpoint(input: string) {
   }
   if (trimmed.includes('/.well-known/agent-card.json')) {
     const card = await fetchJson(trimmed);
-    if (!card.url) throw new Error('Agent card does not include a url');
-    return String(card.url);
+    const endpoint = card.supportedInterfaces?.find((item: any) =>
+      String(item.protocolBinding || item.protocol_binding || '').toUpperCase().includes('JSONRPC')
+    )?.url || card.supportedInterfaces?.[0]?.url || card.url;
+    if (!endpoint) throw new Error('Agent card does not include a supported interface url');
+    return String(endpoint);
   }
 
   const baseUrl = normalizeBaseUrl(trimmed);
   const card = await fetchJson(`${baseUrl}/.well-known/agent-card.json`).catch(() => null);
-  if (card?.url) return String(card.url);
+  if (card) {
+    const endpoint = card.supportedInterfaces?.find((item: any) =>
+      String(item.protocolBinding || item.protocol_binding || '').toUpperCase().includes('JSONRPC')
+    )?.url || card.supportedInterfaces?.[0]?.url || card.url;
+    if (endpoint) return String(endpoint);
+  }
   return `${baseUrl}/a2a`;
 }
 
@@ -64,12 +72,11 @@ export async function sendA2aMessage(options: {
   const transport = new JsonRpcTransport({ endpoint, fetchImpl });
   return transport.sendMessage({
     message: {
-      kind: 'message',
       messageId: `cli_${Date.now()}`,
       role: 'user',
-      parts: [{ kind: 'text', text: options.content }],
+      parts: [{ text: options.content, mediaType: 'text/plain' }],
       ...(options.contextId ? { contextId: options.contextId } : {})
-    },
+    } as any,
     ...(options.acceptedOutputModes?.length
       ? { configuration: { acceptedOutputModes: options.acceptedOutputModes } }
       : {}),
@@ -98,7 +105,7 @@ export async function sendA2aMessageLegacy(options: {
     params: {
       message: {
         role: 'user',
-        parts: [{ kind: 'text', text: options.content }]
+        parts: [{ text: options.content, mediaType: 'text/plain' }]
       },
       ...(options.acceptedOutputModes?.length
         ? { configuration: { acceptedOutputModes: options.acceptedOutputModes } }

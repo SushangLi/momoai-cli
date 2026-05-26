@@ -75,7 +75,7 @@ momoai> $agent serve --host 127.0.0.1 --port 41241
 ```
 
 Local mode is the default. It does not charge a CLI agent fee and does not require a platform invocation JWT.
-Expose `/.well-known/agent-card.json` and `/.well-known/oasf-record.json` from the same host when another local agent needs to discover it.
+Expose `/.well-known/agent-card.json` and `/.well-known/momoai-a2a/market-card.json` from the same host when another local agent or the MOMOAI market needs to discover it.
 
 Choose the chat model:
 
@@ -272,7 +272,7 @@ curl -X POST "https://momoai.pro/api/agent-proxy" \
   -d '{"model":"237","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-### `$agent profile|publish|update-listing|serve|connect|card|oasf|call`
+### `$agent profile|publish|update-listing|serve|connect|card|market-card|call`
 
 Runs this CLI as one or more A2A-capable agents, creates or updates MOMOAI remote-service listings, connects a profile as a provider, prints capability metadata, or calls another A2A agent.
 
@@ -289,11 +289,11 @@ momoai> $agent openclaw install-a2a --profile trader --agent-id 237 --service we
 momoai> $agent serve --mode remote_service --agent-id 237
 momoai> $agent card --json
 momoai> $agent card --profile trader --mode remote_service --json
-momoai> $agent oasf --json
+momoai> $agent market-card --json
 momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability general_task
 ```
 
-Local mode is the default for distributed CLI installs. It exposes A2A/OASF capability metadata but does not charge a CLI agent fee; the user's local MOMO key still pays for model calls and any child agents the CLI invokes.
+Local mode is the default for distributed CLI installs. It exposes A2A capability metadata and a MOMOAI market card but does not charge a CLI agent fee; the user's local MOMO key still pays for model calls and any child agents the CLI invokes.
 
 Remote service mode is for agents listed on MOMOAI and provided from the owner's local or private machine. The default service type is `websocket`: the provider opens an outbound relay connection to MOMOAI, expects platform-issued invocation JWTs, requires `metadata.capability_id`, and exposes fixed-result capability prices in provider registration. `--service funnel` registers a direct public HTTPS provider URL instead. With `--provider-runtime external`, the CLI does not proxy traffic; it either registers a direct Funnel endpoint, or configures an external adapter such as OpenClaw's MOMOAI adapter to own the WebSocket relay connection.
 
@@ -597,7 +597,7 @@ curl -X POST "https://momoai.pro/api/agent-proxy" \
   -d '{"model":"237","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-### `$agent profile|publish|update-listing|serve|connect|card|oasf|call`
+### `$agent profile|publish|update-listing|serve|connect|card|market-card|call`
 
 把本 CLI 作为一个或多个支持 A2A 的智能体运行，自主创建或更新 MOMOAI 远程服务上架信息，连接为服务提供方，或输出能力元数据、调用其他 A2A 智能体。
 
@@ -614,11 +614,11 @@ momoai> $agent openclaw install-a2a --profile trader --agent-id 237 --service we
 momoai> $agent serve --mode remote_service --agent-id 237
 momoai> $agent card --json
 momoai> $agent card --profile trader --mode remote_service --json
-momoai> $agent oasf --json
+momoai> $agent market-card --json
 momoai> $agent call https://momoai.pro/a2a/agents/237 "hello" --capability general_task
 ```
 
-分发给用户本地安装时，默认是 local 模式：暴露 A2A/OASF 能力元数据，但不收取 CLI 自身的 agent 费用；内置模型调用和可能调用的其他智能体仍由本地 MOMO key 支付。
+分发给用户本地安装时，默认是 local 模式：暴露 A2A 能力元数据和 MOMOAI 市场卡片，但不收取 CLI 自身的 agent 费用；内置模型调用和可能调用的其他智能体仍由本地 MOMO key 支付。
 
 上架交易时使用 remote_service 模式：默认服务类型是 `websocket`。服务提供方主动向 MOMOAI relay 建立出站连接，不需要开放入站端口；任务只接受平台签发的短期 invocation JWT，调用必须带 `metadata.capability_id`，能力价格在 provider 注册信息中按固定结果 token 暴露。`--service funnel` 用于登记一个平台可直接访问的 HTTPS provider URL。`--provider-runtime external` 不会让 CLI 代理流量：它要么登记一个直连 Funnel endpoint，要么配置 OpenClaw 这类外部 adapter 由自身建立 WebSocket relay。
 

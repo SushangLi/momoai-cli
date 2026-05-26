@@ -23,19 +23,6 @@ function normalizeModes(value, fallback) {
   return modes.length ? modes : fallback;
 }
 
-function normalizeLocalHandler(value) {
-  const handler = isRecord(value) ? value : {};
-  const type = normalizeString(handler.type, 'http').toLowerCase();
-  const path = normalizeString(handler.path || handler.url || handler.endpoint, '');
-  if (type !== 'http' || !path) return undefined;
-  const timeoutSeconds = Number(handler.timeoutSeconds || handler.timeout_seconds || 60);
-  return {
-    type: 'http',
-    path: normalizePath(path, path),
-    timeoutSeconds: Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? Math.floor(timeoutSeconds) : 60
-  };
-}
-
 function normalizeSkill(value, index) {
   const skill = isRecord(value) ? value : {};
   const id = normalizeString(skill.id || skill.capability_id || skill.capabilityId, `skill_${index + 1}`);
@@ -62,7 +49,6 @@ function normalizeSkillBinding(value, index) {
     capabilityDescription: normalizeString(binding.capabilityDescription || binding.capability_description || binding.description, ''),
     inputModes: normalizeModes(binding.inputModes || binding.input_modes, ['text/plain', 'application/json']),
     outputModes: normalizeModes(binding.outputModes || binding.output_modes, ['text/plain']),
-    handler: normalizeLocalHandler(binding.handler || binding.localHandler || binding.local_handler || skill.handler || skill.localHandler || skill.local_handler),
     skill: {
       id: skillId,
       name: normalizeString(skill.name || binding.skillName || binding.skill_name, skillId),
@@ -155,7 +141,8 @@ function jsonRpcResult(id, result) {
 function taskMessage(role, text, metadata = {}) {
   return {
     role,
-    parts: [{ kind: 'text', text }],
+    messageId: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    parts: [{ text, mediaType: 'text/plain' }],
     metadata
   };
 }
@@ -163,6 +150,7 @@ function taskMessage(role, text, metadata = {}) {
 function taskPartsMessage(role, parts, metadata = {}) {
   return {
     role,
+    messageId: `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     parts,
     metadata
   };
@@ -196,10 +184,10 @@ function decodeTextBytes(bytes, mimeType) {
 function filePartToText(part) {
   const file = isRecord(part?.file) ? part.file : part;
   const name = normalizeString(file?.name, 'unnamed');
-  const mimeType = normalizeString(file?.mimeType, 'application/octet-stream');
+  const mimeType = normalizeString(file?.mediaType || file?.media_type || file?.mimeType || file?.mime_type, 'application/octet-stream');
   const uri = normalizeString(file?.uri || file?.url, '');
   if (uri) return `[file: ${name}; mimeType=${mimeType}; uri=${uri}]`;
-  const bytes = typeof file?.bytes === 'string' ? file.bytes : '';
+  const bytes = typeof file?.raw === 'string' ? file.raw : (typeof file?.bytes === 'string' ? file.bytes : '');
   if (!bytes) return `[file: ${name}; mimeType=${mimeType}]`;
   const decoded = decodeTextBytes(bytes, mimeType);
   if (decoded !== undefined) return `[file: ${name}; mimeType=${mimeType}]\n${decoded}`;
@@ -209,7 +197,7 @@ function filePartToText(part) {
 function partToText(part) {
   const kind = String(part?.kind || part?.type || '').toLowerCase();
   if (typeof part?.text === 'string') return part.text.trim();
-  if (kind === 'file' || part?.file || part?.bytes || part?.uri || part?.url) return filePartToText(part);
+  if (kind === 'file' || part?.file || part?.bytes || part?.raw || part?.uri || part?.url) return filePartToText(part);
   if (kind === 'data' || part?.data !== undefined) return `data:\n${safeJson(part.data)}`;
   if (part?.raw !== undefined) return `raw:\n${safeJson(part.raw)}`;
   return '';
@@ -279,50 +267,37 @@ function promptWithSkillBinding(content, binding) {
   ].filter(Boolean).join('\n');
 }
 
-function normalizeHandlerParts(value) {
+function normalizeRuntimeParts(value) {
   if (!Array.isArray(value)) return undefined;
-  const parts = value.filter((part) => isRecord(part) && (typeof part.text === 'string' || part.data !== undefined || part.file || part.raw !== undefined));
+  const parts = value.filter((part) => isRecord(part) && (typeof part.text === 'string' || part.data !== undefined || part.raw !== undefined || part.url));
   return parts.length ? parts : undefined;
 }
 
-async function invokeConfiguredHandler(origin, service, params, content, binding, taskMetadata) {
-  if (!binding?.handler) return undefined;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), binding.handler.timeoutSeconds * 1000);
-  try {
-    const response = await fetch(`${origin}${binding.handler.path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json'
-      },
-      body: JSON.stringify({
-        service: { id: service.id },
-        capabilityId: binding.capabilityId,
-        skill: binding.skill,
-        acceptedOutputModes: acceptedOutputModesFromParams(params),
-        content,
-        message: params?.message,
-        metadata: taskMetadata,
-        request: params
-      }),
-      signal: controller.signal
-    });
-    const text = await response.text();
-    const payload = text ? JSON.parse(text) : {};
-    if (!response.ok) {
-      throw new Error(payload?.error || `Configured A2A handler returned HTTP ${response.status}`);
-    }
-    const parts = normalizeHandlerParts(payload.parts || payload.message?.parts);
-    if (!parts) throw new Error('Configured A2A handler did not return A2A parts.');
-    return {
-      artifactName: normalizeString(payload.artifactName || payload.artifact_name || payload.name, 'result'),
-      parts,
-      metadata: isRecord(payload.metadata) ? payload.metadata : {}
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
+function localRuntimeRegistry() {
+  return globalThis[Symbol.for('openclaw.a2a.localRuntime.v1')];
+}
+
+async function invokeLocalRuntime(service, params, content, binding, taskMetadata) {
+  const runtime = localRuntimeRegistry();
+  if (!runtime || typeof runtime.execute !== 'function') return undefined;
+  const payload = await runtime.execute({
+    service: { id: service.id },
+    capabilityId: binding?.capabilityId || '',
+    skill: binding?.skill,
+    acceptedOutputModes: acceptedOutputModesFromParams(params),
+    content,
+    message: params?.message,
+    metadata: taskMetadata,
+    request: params
+  });
+  if (!payload) return undefined;
+  const parts = normalizeRuntimeParts(payload.parts || payload.message?.parts);
+  if (!parts) throw new Error('Local A2A runtime did not return A2A parts.');
+  return {
+    artifactName: normalizeString(payload.artifactName || payload.artifact_name || payload.name, 'result'),
+    parts,
+    metadata: isRecord(payload.metadata) ? payload.metadata : {}
+  };
 }
 
 function collectPayloadText(payloads) {
@@ -378,29 +353,27 @@ function buildAgentCard(req, service) {
   const defaultInputModes = normalizeModes(service.skills.flatMap((skill) => skill.inputModes || []), ['text/plain', 'application/json']);
   const defaultOutputModes = normalizeModes(service.skills.flatMap((skill) => skill.outputModes || []), ['text/plain']);
   return {
-    protocolVersion: '1.0.0',
     name: service.name,
     description: service.description,
     version: service.version,
-    url: endpoint,
     supportedInterfaces: [
-      { transport: 'JSONRPC', url: endpoint },
-      { transport: 'HTTP+JSON', url: endpoint }
+      { protocolBinding: 'JSONRPC', protocolVersion: '1.0.0', url: endpoint },
+      { protocolBinding: 'HTTP+JSON', protocolVersion: '1.0.0', url: endpoint }
     ],
     defaultInputModes,
     defaultOutputModes,
     capabilities: {
       streaming: false,
       pushNotifications: false,
-      stateTransitionHistory: true
+      extendedAgentCard: false
     },
     skills: service.skills,
     securitySchemes: {},
-    security: []
+    securityRequirements: []
   };
 }
 
-async function handleSendMessage(api, service, requestId, params, origin) {
+async function handleSendMessage(api, service, requestId, params) {
   const content = contentFromMessage(params?.message);
   if (!content) return jsonRpcError(requestId, -32602, 'message/send requires at least one text, data, or file part');
 
@@ -428,20 +401,20 @@ async function handleSendMessage(api, service, requestId, params, origin) {
   tasks.set(taskId, task);
 
   try {
-    const handlerResult = await invokeConfiguredHandler(origin, service, params, content, binding, taskMetadata);
-    if (handlerResult) {
+    const runtimeResult = await invokeLocalRuntime(service, params, content, binding, taskMetadata);
+    if (runtimeResult) {
       task.status = {
         state: 'TASK_STATE_COMPLETED',
-        message: taskPartsMessage('agent', handlerResult.parts, taskMetadata)
+        message: taskPartsMessage('agent', runtimeResult.parts, taskMetadata)
       };
       task.artifacts = [
         {
           artifactId: `artifact_${taskId}`,
-          name: handlerResult.artifactName,
-          parts: handlerResult.parts,
+          name: runtimeResult.artifactName,
+          parts: runtimeResult.parts,
           metadata: {
             ...taskMetadata,
-            ...handlerResult.metadata
+            ...runtimeResult.metadata
           }
         }
       ];
@@ -458,7 +431,7 @@ async function handleSendMessage(api, service, requestId, params, origin) {
       {
         artifactId: `artifact_${taskId}`,
         name: 'result',
-        parts: [{ kind: 'text', text: reply }],
+        parts: [{ text: reply, mediaType: 'text/plain' }],
         metadata: {
           ...taskMetadata
         }
@@ -477,13 +450,13 @@ async function handleSendMessage(api, service, requestId, params, origin) {
   }
 }
 
-async function handleJsonRpc(api, service, body, origin) {
+async function handleJsonRpc(api, service, body) {
   const method = body?.method;
   if (body?.jsonrpc !== '2.0' || typeof method !== 'string') {
     return jsonRpcError(body?.id, -32600, 'Invalid JSON-RPC request');
   }
   if (method === 'message/send' || method === 'SendMessage') {
-    return handleSendMessage(api, service, body.id, body.params || {}, origin);
+    return handleSendMessage(api, service, body.id, body.params || {});
   }
   if (method === 'tasks/get' || method === 'GetTask') {
     const taskId = String(body.params?.id || body.params?.taskId || '');
@@ -533,7 +506,7 @@ function registerService(api, service) {
       return true;
     }
     try {
-      sendJson(res, 200, await handleJsonRpc(api, service, await readJson(req), originFromRequest(req)));
+      sendJson(res, 200, await handleJsonRpc(api, service, await readJson(req)));
     } catch (error) {
       sendJson(res, 400, jsonRpcError(null, -32700, error instanceof Error ? error.message : String(error)));
     }
@@ -546,7 +519,7 @@ function registerService(api, service) {
       return true;
     }
     try {
-      const response = await handleSendMessage(api, service, null, await readJson(req), originFromRequest(req));
+      const response = await handleSendMessage(api, service, null, await readJson(req));
       sendJson(res, 200, response.result || response);
     } catch (error) {
       sendJson(res, 400, { error: error instanceof Error ? error.message : String(error) });
