@@ -6,6 +6,7 @@ import { verifyInvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import { startAgentServer } from './server.js';
 import { contentFromA2aMessage } from './message.js';
+import { acceptedOutputModesFromParams, executeProviderExecutor, hasProviderExecutor } from './provider-executor.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
 import type { ResolvedAgentConfig } from '../config.js';
 
@@ -72,7 +73,8 @@ function marketCapabilities(agent: ResolvedAgentConfig) {
       enabled: capability.enabled !== false,
       sortOrder: index,
       inputModes: capability.inputModes || ['text/plain', 'application/json'],
-      outputModes: capability.outputModes || ['text/plain']
+      outputModes: capability.outputModes || ['text/plain'],
+      ...(capability.formatContract ? { formatContract: capability.formatContract } : {})
     }));
 }
 
@@ -130,15 +132,34 @@ async function executeProviderInvocation(invocation: ProviderInvocation, agent: 
     }
     const capability = agent.capabilities.find((item) => item.enabled !== false && item.id === capabilityId);
     if (!capability) return jsonRpcError(request.id, -32602, `Unknown or disabled capability_id: ${capabilityId}`);
-    if (!capability.skill?.id || !capability.skill.instructions?.trim()) {
+    if (!hasProviderExecutor(agent) && (!capability.skill?.id || !capability.skill.instructions?.trim())) {
       return jsonRpcError(request.id, -32602, `Capability ${capabilityId} is not bound to a local skill with instructions`);
+    }
+
+    const contextId = String(params.metadata?.contextId || params.contextId || auth.runId || invocation.run_id);
+    if (hasProviderExecutor(agent)) {
+      return await executeProviderExecutor({
+        protocolVersion: 'momoai.provider-executor.v1',
+        request,
+        content,
+        mode: 'remote_service',
+        agent,
+        capability,
+        capabilityId,
+        contextId,
+        taskId: invocation.run_id,
+        acceptedOutputModes: acceptedOutputModesFromParams(params),
+        invocationToken: invocation.invocation_token,
+        auth,
+        options: agent.providerExecutorOptions
+      });
     }
 
     const result = await new AgentRuntime().run({
       content,
       mode: 'remote_service',
       capabilityId,
-      contextId: String(params.metadata?.contextId || params.contextId || auth.runId || invocation.run_id),
+      contextId,
       showPlan: params.metadata?.showPlan === true,
       invocationToken: invocation.invocation_token,
       agent

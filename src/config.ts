@@ -47,6 +47,8 @@ export interface AgentInstanceConfig {
   serviceType?: AgentServiceType;
   providerUrl?: string;
   providerRuntime?: AgentProviderRuntime;
+  providerExecutor?: string;
+  providerExecutorOptions?: Record<string, unknown>;
   name?: string;
   description?: string;
   version?: string;
@@ -63,6 +65,8 @@ export interface ResolvedAgentConfig {
   serviceType: AgentServiceType;
   providerUrl?: string;
   providerRuntime: AgentProviderRuntime;
+  providerExecutor?: string;
+  providerExecutorOptions?: Record<string, unknown>;
   name: string;
   description: string;
   version: string;
@@ -245,6 +249,15 @@ function normalizeFormatContract(value: unknown): Record<string, unknown> | unde
   return value as Record<string, unknown>;
 }
 
+function parseJsonRecord(value: string | undefined): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  try {
+    return normalizeFormatContract(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
 function normalizeCapabilityHandler(value: unknown): AgentCapabilityHandler | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const handler = value as Record<string, unknown>;
@@ -347,6 +360,8 @@ function normalizeAgentInstance(value: unknown): AgentInstanceConfig {
     ...(agent.serviceType === undefined ? {} : { serviceType: normalizeAgentServiceType(agent.serviceType) }),
     ...(typeof agent.providerUrl === 'string' && agent.providerUrl.trim() ? { providerUrl: agent.providerUrl.trim().replace(/\/$/, '') } : {}),
     ...(agent.providerRuntime === undefined ? {} : { providerRuntime: normalizeAgentProviderRuntime(agent.providerRuntime) }),
+    ...(typeof agent.providerExecutor === 'string' && agent.providerExecutor.trim() ? { providerExecutor: agent.providerExecutor.trim() } : {}),
+    ...(normalizeFormatContract(agent.providerExecutorOptions) ? { providerExecutorOptions: normalizeFormatContract(agent.providerExecutorOptions) } : {}),
     ...(typeof agent.name === 'string' && agent.name.trim() ? { name: agent.name.trim() } : {}),
     ...(typeof agent.description === 'string' && agent.description.trim() ? { description: normalizeAgentDescription(agent.description) || agent.description.trim() } : {}),
     ...(typeof agent.version === 'string' && agent.version.trim() ? { version: agent.version.trim() } : {}),
@@ -386,6 +401,8 @@ function buildBaseAgent(storedAgent: Partial<CliConfig['agent']> | undefined): C
     serviceType: normalizeAgentServiceType(process.env.MOMOAI_AGENT_SERVICE_TYPE || storedAgent?.serviceType || defaultConfig.agent.serviceType),
     providerUrl: (process.env.MOMOAI_AGENT_PROVIDER_URL || storedAgent?.providerUrl || '').replace(/\/$/, '') || undefined,
     providerRuntime: normalizeAgentProviderRuntime(process.env.MOMOAI_AGENT_PROVIDER_RUNTIME || storedAgent?.providerRuntime || defaultConfig.agent.providerRuntime),
+    providerExecutor: (process.env.MOMOAI_PROVIDER_EXECUTOR || storedAgent?.providerExecutor || '').trim() || undefined,
+    providerExecutorOptions: parseJsonRecord(process.env.MOMOAI_PROVIDER_EXECUTOR_OPTIONS) || normalizeFormatContract(storedAgent?.providerExecutorOptions),
     description: normalizeAgentDescription(storedAgent?.description) || defaultConfig.agent.description,
     host: process.env.MOMOAI_AGENT_HOST || storedAgent?.host || defaultConfig.agent.host,
     port: Number(process.env.MOMOAI_AGENT_PORT || storedAgent?.port || defaultConfig.agent.port),
@@ -459,6 +476,10 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
     serviceType: normalizeAgentServiceType(merged.agent?.serviceType),
     providerUrl: merged.agent?.providerUrl?.replace(/\/$/, ''),
     providerRuntime: normalizeAgentProviderRuntime(merged.agent?.providerRuntime),
+    providerExecutor: typeof merged.agent?.providerExecutor === 'string' && merged.agent.providerExecutor.trim()
+      ? merged.agent.providerExecutor.trim()
+      : undefined,
+    providerExecutorOptions: normalizeFormatContract(merged.agent?.providerExecutorOptions),
     capabilities: normalizeCapabilities(merged.agent?.capabilities),
     listing: normalizeListing(merged.agent?.listing)
   };
@@ -500,6 +521,8 @@ export function resolveAgentConfig(config: CliConfig, profileName?: string): Res
     serviceType: normalizeAgentServiceType(profile.serviceType || base.serviceType),
     providerUrl: profile.providerUrl || base.providerUrl,
     providerRuntime: normalizeAgentProviderRuntime(profile.providerRuntime || base.providerRuntime),
+    providerExecutor: profile.providerExecutor || base.providerExecutor,
+    providerExecutorOptions: normalizeFormatContract(profile.providerExecutorOptions) || base.providerExecutorOptions,
     name: profile.name || base.name,
     description: normalizeAgentDescription(profile.description) || base.description,
     version: profile.version || base.version,

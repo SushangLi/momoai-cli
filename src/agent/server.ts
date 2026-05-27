@@ -5,6 +5,7 @@ import type { InvocationAuth } from './auth.js';
 import { AgentRuntime } from './runtime.js';
 import { makeId } from './token.js';
 import { contentFromA2aMessage } from './message.js';
+import { acceptedOutputModesFromParams, executeProviderExecutor, hasProviderExecutor } from './provider-executor.js';
 import type { JsonRpcRequest, JsonRpcResponse } from './types.js';
 import { loadConfig, resolveAgentConfig, type AgentMode, type ResolvedAgentConfig } from '../config.js';
 
@@ -17,6 +18,7 @@ interface StoredTask {
   state: TaskState;
   result?: unknown;
   error?: string;
+  a2aTask?: unknown;
 }
 
 const tasks = new Map<string, StoredTask>();
@@ -42,6 +44,7 @@ function jsonRpcError(id: JsonRpcRequest['id'], code: number, message: string, d
 }
 
 function taskResult(task: StoredTask) {
+  if (task.a2aTask) return task.a2aTask;
   const states: Record<TaskState, string> = {
     submitted: 'TASK_STATE_SUBMITTED',
     working: 'TASK_STATE_WORKING',
@@ -62,6 +65,15 @@ function taskResult(task: StoredTask) {
 
 function capabilityIdFromParams(params: any) {
   return String(params?.metadata?.capability_id || params?.metadata?.capabilityId || params?.capability_id || params?.capabilityId || '').trim();
+}
+
+function stateFromA2aTask(task: unknown): TaskState {
+  const state = String((task as any)?.status?.state || '').toUpperCase();
+  if (state === 'TASK_STATE_COMPLETED' || state === 'COMPLETED') return 'completed';
+  if (state === 'TASK_STATE_FAILED' || state === 'FAILED') return 'failed';
+  if (state === 'TASK_STATE_CANCELED' || state === 'TASK_STATE_CANCELLED' || state === 'CANCELED' || state === 'CANCELLED') return 'canceled';
+  if (state === 'TASK_STATE_SUBMITTED' || state === 'SUBMITTED') return 'submitted';
+  return 'working';
 }
 
 async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent: ResolvedAgentConfig, auth?: InvocationAuth) {
@@ -89,7 +101,7 @@ async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent
   }
   if (capabilityId) {
     const capability = agent.capabilities.find((item) => item.enabled !== false && item.id === capabilityId);
-    if (!capability?.skill?.id || !capability.skill.instructions?.trim()) {
+    if (!hasProviderExecutor(agent) && (!capability?.skill?.id || !capability.skill.instructions?.trim())) {
       return jsonRpcError(request.id, -32602, `Capability ${capabilityId} is not bound to a local skill with instructions`);
     }
   }
@@ -104,6 +116,35 @@ async function handleMessageSend(request: JsonRpcRequest, mode: AgentMode, agent
   tasks.set(task.id, task);
 
   try {
+    const capability = capabilityId
+      ? agent.capabilities.find((item) => item.enabled !== false && item.id === capabilityId)
+      : undefined;
+    if (hasProviderExecutor(agent)) {
+      const executorResponse = await executeProviderExecutor({
+        protocolVersion: 'momoai.provider-executor.v1',
+        request,
+        content,
+        mode,
+        agent,
+        capability,
+        capabilityId: capabilityId || undefined,
+        contextId,
+        taskId: task.id,
+        acceptedOutputModes: acceptedOutputModesFromParams(params),
+        invocationToken: auth?.token,
+        auth,
+        options: agent.providerExecutorOptions
+      });
+      if (executorResponse.error) {
+        task.state = 'failed';
+        task.error = executorResponse.error.message;
+      } else {
+        task.a2aTask = executorResponse.result;
+        task.state = stateFromA2aTask(executorResponse.result);
+      }
+      return executorResponse;
+    }
+
     const result = await new AgentRuntime().run({
       content,
       mode,

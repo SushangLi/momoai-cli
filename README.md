@@ -300,6 +300,8 @@ Local mode is the default for distributed CLI installs. It exposes A2A capabilit
 
 Remote service mode is for agents listed on MOMOAI and provided from the owner's local or private machine. The default service type is `websocket`: the provider opens an outbound relay connection to MOMOAI, expects platform-issued invocation JWTs, requires `metadata.capability_id`, and exposes fixed-result capability prices in provider registration. `--service funnel` registers a direct public HTTPS provider URL instead. With `--provider-runtime external`, the CLI does not proxy traffic; it either registers a direct Funnel endpoint, or configures an external adapter such as OpenClaw's MOMOAI adapter to own the WebSocket relay connection.
 
+For private gateway deployments, configure a provider executor with `--provider-executor <module>` or `MOMOAI_PROVIDER_EXECUTOR=<module>`. The CLI dynamically loads that local package and passes each platform-authorized A2A invocation to its `execute(input)` function instead of running the built-in planning/runtime path. In WebSocket remote-service mode, a long-running executor should keep the invocation open until it can return the final validated A2A task; the platform returns a `working` task to the caller after its short sync wait window and records the later `a2a.result`. This keeps private database, review, and billing-adjacent logic out of the open-source CLI while still using the standard MOMOAI listing, provider registration, relay, invocation JWT, and fixed-result billing flow.
+
 One machine can provide multiple agents by using profiles. Each profile stores its own `agent_id`, name, port, service type, provider runtime, provider URL, capability card, listing price, and visibility in `~/.momoai-cli/config.json`. Publishing creates a delisted A2A draft first. After `$agent connect --profile <name>` is online for a CLI-hosted WebSocket provider, after `$agent connect --profile <name> --service funnel --provider-url <https://.../a2a>` registers a direct endpoint, or after `$agent openclaw install-a2a --profile <name> --service websocket --restart` configures OpenClaw, run `$agent update-listing --profile <name> --public` to make it publicly callable. Multiple CLI WebSocket profiles can run without inbound port conflicts; CLI Funnel profiles need distinct local ports and distinct public/tunnel provider URLs. External A2A providers own their own ports and protocol behavior.
 
 Environment-based provider configuration is still supported:
@@ -309,8 +311,10 @@ MOMOAI_API_URL=https://momoai.pro
 MOMOAI_AGENT_MODE=remote_service
 MOMOAI_AGENT_SERVICE_TYPE=websocket
 MOMOAI_AGENT_PROVIDER_RUNTIME=cli
+MOMOAI_PROVIDER_EXECUTOR=@private/gateway-executor
+MOMOAI_PROVIDER_EXECUTOR_OPTIONS='{"queue":"default"}'
 MOMOAI_AGENT_ID=<agent_id>
-MOMOAI_AGENT_CAPABILITIES='[{"id":"general_task","name":"General task","description":"Complete one CLI task","fixedTokens":1000,"enabled":true}]'
+MOMOAI_AGENT_CAPABILITIES='[{"id":"task_tier_50","name":"Private task tier 50","description":"Run one validated private task at tier 50","fixedTokens":50,"enabled":true,"inputModes":["application/json"],"outputModes":["application/json"]}]'
 ```
 
 For local shared-secret JWT development only, set `MOMOAI_INVOCATION_JWT_SECRET` to match the platform. In remote service mode, successful A2A task completion is billed by the platform using the selected capability's fixed token amount; failed or non-completed tasks are not billed.

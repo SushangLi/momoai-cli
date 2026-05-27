@@ -16,11 +16,11 @@ function usage() {
   throw new Error([
     'Usage:',
     '  $agent profile list',
-    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
-    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
-    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>]',
-    '  $agent connect [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-url <url>]',
+    '  $agent profile set <profile> [--name <name>] [--description <text>] [--host <host>] [--port <n>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>]',
+    '  $agent publish [--profile <name>] [--name <name>] [--description <text>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent update-listing [--profile <name>] [--agent-id <id>] [--public|--delisted] [--name <name>] [--description <text>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>] [--price <credits_per_k>] [--available-tokens <n>] [--capabilities <json>|--capabilities-file <path>] [--json]',
+    '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>]',
+    '  $agent connect [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>]',
     '  $agent expose tailscale [--profile <name>] [--kind cli|openclaw|custom] [--local-base-url http://127.0.0.1:18789] [--provider-path /momoai/a2a/<name>] [--paths <comma-list>] [--include-standard] [--dry-run] [--disable]',
     '  $agent openclaw install-a2a [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
@@ -61,6 +61,34 @@ function providerRuntimeFlag(command: ParsedCommand, fallback: AgentProviderRunt
       flagString(command.flags, 'runtime') ||
       fallback
   );
+}
+
+function providerExecutorFlag(command: ParsedCommand, fallback?: string) {
+  return (
+    flagString(command.flags, 'provider-executor') ||
+    flagString(command.flags, 'provider_executor') ||
+    flagString(command.flags, 'executor') ||
+    fallback ||
+    ''
+  ).trim() || undefined;
+}
+
+function providerExecutorOptionsFlag(command: ParsedCommand, fallback?: Record<string, unknown>) {
+  const value =
+    flagString(command.flags, 'provider-executor-options') ||
+    flagString(command.flags, 'provider_executor_options') ||
+    flagString(command.flags, 'executor-options') ||
+    flagString(command.flags, 'executor_options');
+  if (!value) return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('not an object');
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    throw new Error('--provider-executor-options must be a JSON object.');
+  }
 }
 
 function agentIdFlag(command: ParsedCommand, fallback?: number) {
@@ -154,6 +182,8 @@ function agentWithFlags(config: CliConfig, command: ParsedCommand): ResolvedAgen
   const agentId = agentIdFlag(command, agent.agentId);
   const serviceType = serviceTypeFlag(command, agent.serviceType);
   const providerRuntime = providerRuntimeFlag(command, agent.providerRuntime);
+  const providerExecutor = providerExecutorFlag(command, agent.providerExecutor);
+  const providerExecutorOptions = providerExecutorOptionsFlag(command, agent.providerExecutorOptions);
   const providerUrl = flagString(command.flags, 'provider-url') || flagString(command.flags, 'provider_url');
   const price = flagNumber(command.flags, 'price');
   const availableTokens = flagNumber(command.flags, 'available-tokens') ?? flagNumber(command.flags, 'available_tokens');
@@ -167,6 +197,8 @@ function agentWithFlags(config: CliConfig, command: ParsedCommand): ResolvedAgen
     ...(agentId ? { agentId } : {}),
     serviceType,
     providerRuntime,
+    ...(providerExecutor ? { providerExecutor } : {}),
+    ...(providerExecutorOptions ? { providerExecutorOptions } : {}),
     ...(providerUrl ? { providerUrl: providerUrl.trim().replace(/\/$/, '') } : {}),
     ...(capabilities ? { capabilities } : {}),
     listing: {
@@ -187,6 +219,8 @@ function profileUpdateFromAgent(agent: ResolvedAgentConfig, command: ParsedComma
     port: agent.port,
     serviceType: agent.serviceType,
     providerRuntime: agent.providerRuntime,
+    ...(agent.providerExecutor ? { providerExecutor: agent.providerExecutor } : {}),
+    ...(agent.providerExecutorOptions ? { providerExecutorOptions: agent.providerExecutorOptions } : {}),
     ...(agent.providerUrl ? { providerUrl: agent.providerUrl } : {}),
     agentId: agent.agentId,
     capabilities: capabilities || agent.capabilities,
@@ -204,11 +238,13 @@ function validateBillableCapabilities(agent: ResolvedAgentConfig) {
     throw new Error(`A2A listing capabilities require positive fixedTokens: ${invalid.map((capability) => capability.id).join(', ')}`);
   }
 
-  const unbound = agent.capabilities
-    .filter((capability) => capability.enabled !== false)
-    .filter((capability) => !capability.skill?.id || !capability.skill.instructions?.trim());
-  if (unbound.length > 0) {
-    throw new Error(`A2A listing capabilities require a local skill binding with instructions: ${unbound.map((capability) => capability.id).join(', ')}`);
+  if (!agent.providerExecutor) {
+    const unbound = agent.capabilities
+      .filter((capability) => capability.enabled !== false)
+      .filter((capability) => !capability.skill?.id || !capability.skill.instructions?.trim());
+    if (unbound.length > 0) {
+      throw new Error(`A2A listing capabilities require a local skill binding with instructions, unless --provider-executor is configured: ${unbound.map((capability) => capability.id).join(', ')}`);
+    }
   }
 }
 
@@ -236,6 +272,7 @@ export async function agentCommand(command: ParsedCommand) {
         agent: agent.agentId || '',
         service: agent.serviceType,
         runtime: agent.providerRuntime,
+        executor: agent.providerExecutor || '',
         name: agent.name,
         host: agent.host,
         port: agent.port,

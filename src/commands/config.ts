@@ -51,6 +51,8 @@ export async function configCommand(command: ParsedCommand) {
     console.log(`agent.host: ${config.agent.host}`);
     console.log(`agent.port: ${config.agent.port}`);
     console.log(`agent.agentId: ${config.agent.agentId || '(not set)'}`);
+    console.log(`agent.providerRuntime: ${config.agent.providerRuntime}`);
+    console.log(`agent.providerExecutor: ${config.agent.providerExecutor || '(not set)'}`);
     console.log(`agent.capabilities: ${config.agent.capabilities.map((capability) => `${capability.id}${capability.fixedTokens ? `:${capability.fixedTokens}` : ''}`).join(', ')}`);
     const profileNames = Object.keys(config.agentProfiles || {});
     console.log(`agentProfiles: ${profileNames.length ? profileNames.join(', ') : '(none)'}`);
