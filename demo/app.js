@@ -20,16 +20,17 @@ const scenes = [
       { kind: "output", text: "MOMOAI CLI. Run $help for commands." },
       { kind: "output", text: "Current model: momo_237. Run $model to view or change models." },
       { kind: "prompt", prompt: "cli", text: "Find a Gomoku agent that returns JSON. Plan first, then trade only if the price is fair." },
+      { kind: "model", text: "I will handle this as a market task: discover the capability, inspect price/liquidity, buy only within your limit, then call the agent." },
       { kind: "output", text: "CLI agent runtime: A2A tools and market-trading skill loaded." },
       { kind: "output", text: "Plan" },
       { kind: "output", text: "1. Search marketplace Agent Cards by capability, not by name only." },
       { kind: "output", text: "2. Check token balance and resale listings before spending credits." },
       { kind: "output", text: "3. Buy 1000 agent tokens only if the best ask is at or below 5.45." },
       { kind: "output", text: "4. Invoke the selected A2A capability with application/json output." },
-      { kind: "output", text: "market-trading skill: using explore_agents(scope=capability)." },
-      { kind: "output", text: 'tool: explore_agents({"query":"gomoku","scope":"capability","output_mode":"application/json","online_only":true})' },
+      { kind: "model", text: "First I need a capability-level match, because agent names and tags are not precise enough for paid A2A work." },
+      { kind: "tool", text: 'tool: explore_agents({"query":"gomoku","scope":"capability","output_mode":"application/json","online_only":true})' },
       { kind: "json", text: '{\n  "agents": [\n    {\n      "id": 242,\n      "name": "OpenClaw A2A Service",\n      "online": true,\n      "matched_capability": {\n        "id": "gomoku_move",\n        "name": "Gomoku move",\n        "fixed_tokens": 1000,\n        "output_modes": ["text/plain", "application/json"]\n      }\n    }\n  ]\n}' },
-      { kind: "success", text: "Selected capability gomoku_move from agent 242." }
+      { kind: "model", text: "I found an online A2A provider with the exact capability and JSON output support. Next I will inspect liquidity before spending credits." }
     ]
   },
   {
@@ -49,15 +50,16 @@ const scenes = [
     traceActive: 0,
     taskActive: 0,
     terminal: [
-      { kind: "output", text: 'tool: exchange_balance({})' },
+      { kind: "tool", text: 'tool: exchange_balance({})' },
       { kind: "output", text: "OpenClaw A2A Service: 1,840 tokens" },
-      { kind: "output", text: 'tool: exchange_listings({"agent_id":242})' },
+      { kind: "model", text: "The account already has some tokens, but the task needs another 1000 result tokens." },
+      { kind: "tool", text: 'tool: exchange_listings({"agent_id":242})' },
       { kind: "output", text: "ask book: 1400 @ 5.45, 2400 @ 5.51, 2900 @ 5.63" },
-      { kind: "output", text: "market-trading skill: best ask 5.45 is within the approved max price." },
-      { kind: "output", text: 'tool request: exchange_buy({"agent_id":242,"tokens":1000,"max_price":5.45})' },
+      { kind: "model", text: "Best ask is 5.45, exactly within the approved max price, so the market-trading skill can execute the buy." },
+      { kind: "tool", text: 'tool request: exchange_buy({"agent_id":242,"tokens":1000,"max_price":5.45})' },
       { kind: "output", text: "confirmation: approved by plan guard" },
       { kind: "json", text: '{\n  "agent": 242,\n  "tokens_bought": 1000,\n  "tokens_remaining": 0,\n  "credits_used": 5.45,\n  "status": "filled"\n}' },
-      { kind: "success", text: "Agent-token balance updated to 2,840." }
+      { kind: "model", text: "The order filled. We now have enough agent tokens to request the paid capability and only pay the fixed result-token price on completion." }
     ]
   },
   {
@@ -77,13 +79,14 @@ const scenes = [
     traceActive: 4,
     taskActive: 4,
     terminal: [
-      { kind: "output", text: 'tool: call_platform_agent({"agent_id":242,"capability_id":"gomoku_move","output_mode":"application/json"})' },
+      { kind: "model", text: "Now I will call the selected A2A capability and require a structured artifact, not a free-form answer." },
+      { kind: "tool", text: 'tool: call_platform_agent({"agent_id":242,"capability_id":"gomoku_move","output_mode":"application/json"})' },
       { kind: "output", text: 'content: "Black: H8 H9 I8; White: G8 G9; black to move"' },
       { kind: "output", text: "A2A-Version: 1.0.0" },
       { kind: "output", text: "method: message/send" },
       { kind: "output", text: "task: submitted -> working -> completed" },
       { kind: "json", text: '{\n  "task_id": "task_demo_gomoku_001",\n  "state": "TASK_STATE_COMPLETED",\n  "artifact": {\n    "mimeType": "application/json",\n    "data": {\n      "move": { "x": 10, "y": 8, "notation": "J8" },\n      "reason": "extends black pressure while blocking white expansion",\n      "confidence": 0.82\n    }\n  }\n}' },
-      { kind: "success", text: "Invocation succeeded. 1000 result tokens charged." }
+      { kind: "model", text: "The task completed successfully, so the marketplace can charge the fixed 1000 result tokens and return the JSON artifact." }
     ]
   },
   {
@@ -104,14 +107,16 @@ const scenes = [
     taskActive: 0,
     terminal: [
       { kind: "prompt", prompt: "cli", text: "Publish my local OpenClaw on port 18789 with a Gomoku skill priced at 1000 result tokens." },
+      { kind: "model", text: "I will publish it as a remote service: communication stays standard A2A, while MOMOAI adds pricing and invocation security." },
       { kind: "output", text: "Plan" },
       { kind: "output", text: "1. Bind the exposed marketplace capability to a local skill with instructions." },
       { kind: "output", text: "2. Install standard A2A communication and the MOMOAI market adapter." },
       { kind: "output", text: "3. Create a delisted listing, then make it public when the provider node is online." },
-      { kind: "output", text: 'tool: prepare_openclaw_a2a_market_service({"gateway_base_url":"http://127.0.0.1:18789","service_type":"websocket","capabilities":[{"id":"gomoku_move","fixedTokens":1000}]})' },
+      { kind: "tool", text: 'tool: prepare_openclaw_a2a_market_service({"gateway_base_url":"http://127.0.0.1:18789","service_type":"websocket","capabilities":[{"id":"gomoku_move","fixedTokens":1000}]})' },
       { kind: "success", text: "standard A2A adapter: installed" },
       { kind: "success", text: "MOMOAI market adapter: installed" },
-      { kind: "output", text: 'tool: publish_local_agent_listing({"profile":"openclaw","name":"OpenClaw A2A Service","service_type":"websocket"})' },
+      { kind: "model", text: "The local service now has standard A2A communication plus a market adapter. I will create the marketplace listing with the billing contract visible." },
+      { kind: "tool", text: 'tool: publish_local_agent_listing({"profile":"openclaw","name":"OpenClaw A2A Service","service_type":"websocket"})' },
       { kind: "json", text: '{\n  "agent_id": 242,\n  "agent_card": "https://momoai.pro/a2a/agents/242",\n  "market_card": "https://momoai.pro/api/agents/242/market-card",\n  "mode": "remote_service"\n}' }
     ]
   },
@@ -132,7 +137,8 @@ const scenes = [
     traceActive: 4,
     taskActive: 0,
     terminal: [
-      { kind: "output", text: 'tool: update_local_agent_listing({"profile":"openclaw","agent_id":242,"public":true})' },
+      { kind: "model", text: "The provider is ready. I will make the listing public and keep the local runtime connected through the WebSocket relay." },
+      { kind: "tool", text: 'tool: update_local_agent_listing({"profile":"openclaw","agent_id":242,"public":true})' },
       { kind: "success", text: "A2A remote service listing updated: public" },
       { kind: "output", text: "provider connection: websocket relay is the default, no funnel required" },
       { kind: "output", text: "provider runtime: external OpenClaw service, not a CLI proxy" },
@@ -140,7 +146,8 @@ const scenes = [
       { kind: "output", text: "relay: wss://momoai.pro/a2a/provider/relay" },
       { kind: "output", text: "provider node: node_demo_openclaw_18789" },
       { kind: "success", text: "OpenClaw is online and ready for A2A invocations." },
-      { kind: "json", text: '{\n  "agent_id": 242,\n  "service": "websocket",\n  "local_url": "http://127.0.0.1:18789",\n  "capabilities": ["general_task", "market_trading", "gomoku_move"],\n  "status": "ready"\n}' }
+      { kind: "json", text: '{\n  "agent_id": 242,\n  "service": "websocket",\n  "local_url": "http://127.0.0.1:18789",\n  "capabilities": ["general_task", "market_trading", "gomoku_move"],\n  "status": "ready"\n}' },
+      { kind: "model", text: "Done. The local OpenClaw service is now discoverable, priced by capability, callable through A2A, and still executed on this machine." }
     ]
   }
 ];
@@ -228,25 +235,25 @@ const marketEvents = {
     { symbol: "refactor", price: 6.55, volume: 0 }
   ],
   trade: [
-    { symbol: "gomoku", price: 5.45, volume: 1000, fillAsk: "ask-1", event: "Buy 1,000 @ 5.45" },
+    { symbol: "gomoku", price: 5.88, volume: 1000, fillAsk: "ask-1", event: "Buy 1,000 @ 5.45" },
     { symbol: "research", price: 3.29, volume: 600 },
     { symbol: "vision", price: 7.72, volume: 900 },
     { symbol: "refactor", price: 6.62, volume: 700 }
   ],
   invoke: [
-    { symbol: "gomoku", price: 5.47, volume: 1000, charge: true, event: "A2A task charged" },
+    { symbol: "gomoku", price: 6.24, volume: 1000, charge: true, event: "A2A task charged" },
     { symbol: "research", price: 3.31, volume: 300 },
     { symbol: "vision", price: 7.68, volume: 400 },
     { symbol: "refactor", price: 6.70, volume: 900 }
   ],
   publish: [
-    { symbol: "gomoku", price: 5.56, volume: 1200, event: "Market Card published" },
+    { symbol: "gomoku", price: 6.78, volume: 1200, event: "Market Card published" },
     { symbol: "research", price: 3.35, volume: 400 },
     { symbol: "vision", price: 7.61, volume: 500 },
     { symbol: "refactor", price: 6.77, volume: 800 }
   ],
   serve: [
-    { symbol: "gomoku", price: 5.62, volume: 1800, event: "Provider live" },
+    { symbol: "gomoku", price: 7.35, volume: 1800, event: "Provider live" },
     { symbol: "research", price: 3.38, volume: 500 },
     { symbol: "vision", price: 7.57, volume: 300 },
     { symbol: "refactor", price: 6.83, volume: 700 }
@@ -398,9 +405,10 @@ function appendTrade(market, event) {
   const price = Number(event.price);
   market.price = price;
   market.volume += Number(event.volume || 0);
+  const impulse = Math.max(0.05, Math.abs(price - previous) * 0.28);
   market.candles.push({
     open: previous,
-    high: Math.max(previous, price) + 0.04,
+    high: Math.max(previous, price) + impulse,
     low: Math.min(previous, price) - 0.04,
     close: price
   });
@@ -464,7 +472,8 @@ function renderKline(market) {
     const up = item.close >= item.open;
     const bodyY = Math.min(open, close);
     const bodyHeight = Math.max(3, Math.abs(close - open));
-    const klass = up ? "chart-up" : "chart-down";
+    const isLatest = index === candles.length - 1;
+    const klass = `${up ? "chart-up" : "chart-down"} ${isLatest ? "chart-latest" : ""}`;
     return `
       <line class="chart-wick ${klass}" x1="${x}" y1="${high.toFixed(1)}" x2="${x}" y2="${low.toFixed(1)}" />
       <rect class="chart-candle ${klass}" x="${(x - bodyWidth / 2).toFixed(1)}" y="${bodyY.toFixed(1)}" width="${bodyWidth}" height="${bodyHeight.toFixed(1)}" />
@@ -536,13 +545,24 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
-function highlightTerms(value) {
-  return escapeHtml(value).replace(/\b(Plan|plan|tool)\b/g, '<span class="term-highlight">$1</span>');
+function highlightLine(kind, value) {
+  const text = String(value);
+  if (text === "Plan") {
+    return '<span class="term-highlight">Plan</span>';
+  }
+  if (kind === "tool" && text.startsWith("tool request:")) {
+    return `<span class="term-highlight">tool request:</span>${escapeHtml(text.slice("tool request:".length))}`;
+  }
+  if (kind === "tool" && text.startsWith("tool:")) {
+    return `<span class="term-highlight">tool:</span>${escapeHtml(text.slice("tool:".length))}`;
+  }
+  return escapeHtml(text);
 }
 
 function lineDelay(kind, line) {
   if (kind === "json") return 18;
-  if (line.startsWith("tool:") || line.startsWith("tool request:")) return 28;
+  if (kind === "tool") return 30;
+  if (kind === "model") return 52;
   if (line === "Plan") return 240;
   if (/^\d+\./.test(line)) return 70;
   if (kind === "success") return 85;
@@ -551,7 +571,8 @@ function lineDelay(kind, line) {
 
 function entryPause(kind, text) {
   if (text === "Plan") return 520;
-  if (text.startsWith("tool:") || text.startsWith("tool request:")) return 340;
+  if (kind === "tool") return 390;
+  if (kind === "model") return 520;
   if (kind === "json") return 220;
   if (kind === "success") return 430;
   return 150;
@@ -560,7 +581,7 @@ function entryPause(kind, text) {
 function appendLine(kind, text = "") {
   const line = document.createElement("span");
   line.className = `terminal-line ${kind}`;
-  line.innerHTML = highlightTerms(text);
+  line.innerHTML = highlightLine(kind, text);
   terminalOutput.appendChild(line);
   terminalOutput.scrollTop = terminalOutput.scrollHeight;
   return line;
@@ -591,7 +612,7 @@ async function typePrompt(command, token, promptType = "shell") {
   for (const char of command) {
     if (token !== renderToken) return;
     commandNode.dataset.text = `${commandNode.dataset.text || ""}${char}`;
-    commandNode.innerHTML = highlightTerms(commandNode.dataset.text);
+    commandNode.innerHTML = escapeHtml(commandNode.dataset.text);
     terminalOutput.scrollTop = terminalOutput.scrollHeight;
     await sleep(promptType === "cli" ? 11 : 15);
   }

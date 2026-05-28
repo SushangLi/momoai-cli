@@ -341,6 +341,14 @@ h2 {
   color: #b9c1c9;
 }
 
+.terminal-line.model {
+  color: #f0d8a8;
+}
+
+.terminal-line.tool {
+  color: #a8c7ff;
+}
+
 .terminal-line.json {
   color: #9bd4ff;
 }
@@ -665,6 +673,11 @@ h2 {
   rx: 1.5;
 }
 
+.chart-latest {
+  filter: drop-shadow(0 0 5px rgba(36, 122, 67, 0.35));
+  stroke-width: 2;
+}
+
 .chart-up {
   fill: rgba(36, 122, 67, 0.8);
   stroke: var(--green);
@@ -678,7 +691,7 @@ h2 {
 .chart-line {
   fill: none;
   stroke: var(--blue);
-  stroke-width: 1.8;
+  stroke-width: 2.2;
 }
 
 .market-stats {
