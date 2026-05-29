@@ -469,6 +469,11 @@ h2 {
   padding: 13px;
 }
 
+.inspector .status-panel,
+.inspector .watchlist {
+  display: none;
+}
+
 .panel-heading {
   display: flex;
   align-items: flex-start;
@@ -523,7 +528,7 @@ h2 {
 
 .market-desk {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 
