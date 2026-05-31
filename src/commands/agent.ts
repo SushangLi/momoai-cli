@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { buildAgentCard, buildMarketCard, buildOasfRecord } from '../agent/card.js';
 import { sendA2aMessage } from '../agent/client.js';
-import { installOpenClawA2a } from '../agent/openclaw.js';
+import { inspectOpenClawA2aStack, installOpenClawA2a } from '../agent/openclaw.js';
+import { publishOpenClawA2aService } from '../agent/openclaw-publishing.js';
 import { exposeViaTailscaleFunnel } from '../agent/tailscale.js';
 import { runRemoteServiceProvider } from '../agent/provider.js';
 import { startAgentServer } from '../agent/server.js';
@@ -22,7 +23,9 @@ function usage() {
     '  $agent serve [--profile <name>] [--mode local|remote_service] [--host 127.0.0.1] [--port 41241] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>]',
     '  $agent connect [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--provider-runtime cli|external] [--provider-executor <module>] [--provider-executor-options <json>] [--provider-url <url>]',
     '  $agent expose tailscale [--profile <name>] [--kind cli|openclaw|custom] [--local-base-url http://127.0.0.1:18789] [--provider-path /momoai/a2a/<name>] [--paths <comma-list>] [--include-standard] [--dry-run] [--disable]',
+    '  $agent openclaw inspect-a2a [--profile <name>] [--service websocket|funnel] [--gateway-base-url http://127.0.0.1:18789] [--openclaw-bin openclaw] [--service-id <id>] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--json]',
     '  $agent openclaw install-a2a [--profile <name>] [--agent-id <id>] [--service websocket|funnel] [--gateway-base-url http://127.0.0.1:18789] [--standard-plugin-source <source>] [--skip-standard-plugin] [--upstream-path /a2a/<name>] [--protected-path /momoai/a2a/<name>] [--provider-url <url>] [--allow-unauthenticated] [--restart]',
+    '  $agent openclaw publish [--profile openclaw] [--name <name>] [--description <text>] [--price <credits_per_k>] [--available-tokens <n>] --capabilities-file <path> [--public] [--restart] [--json]',
     '  $agent card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent market-card [--profile <name>] [--mode local|remote_service] [--json] [--agent-id <id>]',
     '  $agent call <agent-card-url-or-endpoint> <message...> [--auth <token>] [--capability <id>] [--output-mode <mime[,mime]>] [--context <id>] [--show-plan] [--json]'
@@ -123,6 +126,8 @@ function parseCapabilities(value: string): AgentCapability[] {
     outputModes: normalizeModes(capability.outputModes || capability.output_modes),
     formatContract: capability.formatContract || capability.format_contract,
     handler: capability.handler || capability.localHandler || capability.local_handler,
+    ...(capability.pluginId || capability.plugin_id ? { pluginId: capability.pluginId || capability.plugin_id } : {}),
+    ...(capability.pluginSource || capability.plugin_source ? { pluginSource: capability.pluginSource || capability.plugin_source } : {}),
     skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('--capabilities must include at least one capability with id and name.');
@@ -441,6 +446,90 @@ export async function agentCommand(command: ParsedCommand) {
 
   if (action === 'openclaw') {
     const [openclawAction] = args;
+    if (openclawAction === 'inspect-a2a') {
+      const profile = profileFlag(command) || 'openclaw';
+      const serviceType = explicitServiceTypeFlag(command) || 'websocket';
+      const result = await inspectOpenClawA2aStack({
+        openclawBin: flagString(command.flags, 'openclaw-bin') || flagString(command.flags, 'openclaw_bin'),
+        gatewayBaseUrl: flagString(command.flags, 'gateway-base-url') || flagString(command.flags, 'gateway_base_url') || flagString(command.flags, 'base-url') || flagString(command.flags, 'base_url'),
+        serviceType,
+        serviceId: flagString(command.flags, 'service-id') || flagString(command.flags, 'service_id') || profile,
+        upstreamPath: flagString(command.flags, 'upstream-path') || flagString(command.flags, 'upstream_path') || flagString(command.flags, 'path'),
+        protectedPath: flagString(command.flags, 'protected-path') || flagString(command.flags, 'protected_path'),
+        agentCardPath: flagString(command.flags, 'agent-card-path') || flagString(command.flags, 'agent_card_path') || flagString(command.flags, 'card-path') || flagString(command.flags, 'card_path'),
+        marketPath: flagString(command.flags, 'market-path') || flagString(command.flags, 'market_path'),
+        oasfPath: flagString(command.flags, 'oasf-path') || flagString(command.flags, 'oasf_path')
+      });
+      if (command.flags.json) return printJson(result);
+      console.log('OpenClaw A2A stack inspection.');
+      console.log(`profile: ${profile}`);
+      console.log(`openclaw service: ${result.serviceId}`);
+      console.log(`standard a2a: ${result.requirements.standardA2a}`);
+      console.log(`momoai adapter: ${result.requirements.momoaiAdapter}`);
+      console.log(`skill router: ${result.requirements.skillRouter}`);
+      console.log(`openclaw config readable: ${result.pluginConfig.configReadable ? 'yes' : 'no'}`);
+      console.log(`standard endpoint: ${result.standardA2a.endpointUrl}`);
+      console.log(`standard agent card: ${result.standardA2a.agentCardUrl}`);
+      console.log(`momoai protected endpoint: ${result.momoaiAdapter.protectedUrl}`);
+      console.log(`momoai market card: ${result.momoaiAdapter.marketCardUrl}`);
+      if (result.standardA2a.error) console.log(`standard probe error: ${result.standardA2a.error}`);
+      if (result.momoaiAdapter.error) console.log(`adapter probe error: ${result.momoaiAdapter.error}`);
+      return;
+    }
+    if (openclawAction === 'publish') {
+      const capabilities = capabilitiesFromFlags(command);
+      if (!capabilities) throw new Error('$agent openclaw publish requires --capabilities or --capabilities-file.');
+      const serviceType = explicitServiceTypeFlag(command) || 'websocket';
+      const restartFlag = command.flags.restart;
+      const result = await publishOpenClawA2aService({
+        profile: profileFlag(command) || 'openclaw',
+        name: flagString(command.flags, 'name'),
+        description: flagString(command.flags, 'description') || flagString(command.flags, 'intro'),
+        agentId: agentIdFlag(command),
+        serviceType,
+        providerUrl: flagString(command.flags, 'provider-url') || flagString(command.flags, 'provider_url'),
+        price: flagNumber(command.flags, 'price'),
+        availableTokens: flagNumber(command.flags, 'available-tokens') ?? flagNumber(command.flags, 'available_tokens'),
+        public: command.flags.public === true,
+        restart: restartFlag === undefined ? true : restartFlag === true || String(restartFlag).toLowerCase() !== 'false',
+        openclawBin: flagString(command.flags, 'openclaw-bin') || flagString(command.flags, 'openclaw_bin'),
+        gatewayBaseUrl: flagString(command.flags, 'gateway-base-url') || flagString(command.flags, 'gateway_base_url') || flagString(command.flags, 'base-url') || flagString(command.flags, 'base_url'),
+        standardPluginSource:
+          flagString(command.flags, 'standard-plugin-source') ||
+          flagString(command.flags, 'standard_plugin_source') ||
+          flagString(command.flags, 'official-a2a-plugin-source') ||
+          flagString(command.flags, 'official_a2a_plugin_source') ||
+          flagString(command.flags, 'a2a-plugin-source') ||
+          flagString(command.flags, 'a2a_plugin_source'),
+        skipStandardPlugin: command.flags['skip-standard-plugin'] === true || command.flags.skip_standard_plugin === true,
+        serviceId: flagString(command.flags, 'service-id') || flagString(command.flags, 'service_id'),
+        upstreamPath: flagString(command.flags, 'upstream-path') || flagString(command.flags, 'upstream_path') || flagString(command.flags, 'path'),
+        protectedPath: flagString(command.flags, 'protected-path') || flagString(command.flags, 'protected_path'),
+        agentCardPath: flagString(command.flags, 'agent-card-path') || flagString(command.flags, 'agent_card_path') || flagString(command.flags, 'card-path') || flagString(command.flags, 'card_path'),
+        marketPath: flagString(command.flags, 'market-path') || flagString(command.flags, 'market_path'),
+        oasfPath: flagString(command.flags, 'oasf-path') || flagString(command.flags, 'oasf_path'),
+        requirePlatformAuth: command.flags['allow-unauthenticated'] === true || command.flags.allow_unauthenticated === true ? false : true,
+        forwardAuthorization: command.flags['forward-authorization'] === true || command.flags.forward_authorization === true,
+        capabilities
+      });
+      if (command.flags.json) return printJson(result);
+      console.log('OpenClaw A2A service published.');
+      console.log(`profile: ${result.profile}`);
+      console.log(`agent id: ${result.agent_id}`);
+      console.log(`service type: ${result.service_type}`);
+      console.log(`standard a2a endpoint: ${result.standard_a2a_url}`);
+      console.log(`momoai protected provider endpoint: ${result.protected_provider_url}`);
+      console.log(`standard agent card: ${result.agent_card_url}`);
+      console.log(`momoai market card: ${result.market_card_url}`);
+      console.log(`preflight standard a2a: ${result.install?.inspection?.requirements?.standardA2a || 'unknown'}`);
+      console.log(`preflight momoai adapter: ${result.install?.inspection?.requirements?.momoaiAdapter || 'unknown'}`);
+      console.log(`provider online: ${result.provider_online ? 'yes' : 'no'}`);
+      console.log(`visibility: ${result.delisted ? 'delisted' : 'public'}`);
+      for (const warning of result.warnings || []) {
+        console.log(`warning: ${warning}`);
+      }
+      return;
+    }
     if (openclawAction !== 'install-a2a') usage();
     const baseAgent = agentWithFlags(config, command);
     const serviceType = explicitServiceTypeFlag(command) || 'websocket';
@@ -485,7 +574,14 @@ export async function agentCommand(command: ParsedCommand) {
     console.log(`service type: ${result.serviceType}`);
     console.log(`standard plugin source: ${result.standardPluginSource}`);
     console.log(`standard plugin installed: ${result.standardPluginInstalled ? 'yes' : 'no'}`);
+    console.log(`standard plugin reused: ${result.standardPluginReused ? 'yes' : 'no'}`);
     console.log(`standard plugin configured: ${result.standardPluginConfigured ? 'yes' : 'no'}`);
+    console.log(`skill router installed: ${result.skillRouterPluginInstalled ? 'yes' : 'no'}`);
+    console.log(`skill router reused: ${result.skillRouterPluginReused ? 'yes' : 'no'}`);
+    console.log(`skill router configured: ${result.skillRouterConfigured ? 'yes' : 'no'}`);
+    console.log(`momoai adapter installed: ${result.adapterPluginInstalled ? 'yes' : 'no'}`);
+    console.log(`momoai adapter reused: ${result.adapterPluginReused ? 'yes' : 'no'}`);
+    console.log(`momoai adapter configured: ${result.adapterPluginConfigured ? 'yes' : 'no'}`);
     console.log(`standard a2a endpoint: ${result.localStandardA2aUrl}`);
     console.log(`momoai protected provider endpoint: ${result.localProtectedProviderUrl}`);
     console.log(`standard agent card: ${result.localAgentCardUrl}`);

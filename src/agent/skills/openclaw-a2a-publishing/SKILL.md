@@ -1,40 +1,51 @@
 # OpenClaw A2A Publishing Skill
 
-Use this when the user wants to publish a local OpenClaw agent on MOMOAI through A2A.
+Use this when the user wants the CLI to publish one or more capabilities from a local OpenClaw Gateway to MOMOAI.
 
 ## Core Boundary
 
-Do not modify OpenClaw official source code. Do not put momoai-cli in the runtime invocation path.
+- This is a MOMOAI CLI operating skill, not an OpenClaw business skill.
+- Do not modify OpenClaw official source code.
+- Do not put momoai-cli in the runtime invocation path.
+- Do not create, install, or rely on capability-specific plugins for MOMOAI OpenClaw publishing.
+- Publish different OpenClaw abilities by configuring A2A capabilities with local skill instructions.
 
-Split the integration:
+## Required Inputs
 
-- A standard A2A OpenClaw plugin owns generic A2A protocol communication and the standard Agent Card. Use the bundled spec-compatible plugin by default; replace it with an official OpenClaw A2A plugin when one is explicitly available.
-- The MOMOAI A2A adapter plugin owns MOMOAI market metadata, platform invocation protection, and either the outbound WebSocket relay connection or the protected Funnel provider URL registered with momoai.pro.
+Before publishing, identify:
+
+- Profile name, normally `openclaw`.
+- Local OpenClaw Gateway URL, normally `http://127.0.0.1:18789`.
+- Public agent name and description.
+- One or more capabilities, each with `id`, `name`, `description`, `fixedTokens`, input/output modes, and `skill.instructions`.
+- Whether the listing should become public after provider verification.
+
+Do not invent missing capability ids, prices, or instructions. Ask the user when they are missing.
 
 ## Workflow
 
-1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, priced capabilities, each capability's bound local skill, and service type. Use `websocket` by default; require a public provider URL only for `funnel`. A MOMOAI `agent_id` is not required for local standard A2A communication.
-2. Probe the local service, usually `http://127.0.0.1:18789`, for `/.well-known/agent-card.json` and a JSON-RPC A2A endpoint.
-3. If standard A2A is missing, run `prepare_openclaw_a2a_market_service` or `$agent openclaw install-a2a`. This installs the bundled standard A2A plugin first unless `--standard-plugin-source` points at another plugin or `--skip-standard-plugin` is set.
-4. Install/configure the MOMOAI adapter plugin in OpenClaw. Its `protected_path` must differ from the standard `upstream_path`.
-5. Restart OpenClaw Gateway after plugin changes, or run the install command with `--restart`.
-6. For `websocket`, the CLI registers a provider node and writes `relayUrl` plus `providerToken` into OpenClaw config only when an `agent_id` is present. Without `agent_id`, it still configures local standard A2A and the MOMOAI adapter metadata. For `funnel`, publish/update the MOMOAI listing with `provider_runtime external` and `provider_url` set to the public MOMOAI protected provider endpoint.
-7. Only make the listing public after the standard A2A endpoint works locally and the MOMOAI provider node is online.
-8. For structured capabilities, declare `inputModes`, `outputModes`, and a MOMOAI `formatContract` in the capability config. If the capability needs deterministic behavior, bind it to the agent's local runtime handler/plugin config; do not add capability-specific logic to the standard A2A plugin or MOMOAI market adapter. Callers request the desired result media type with A2A `params.configuration.acceptedOutputModes`; the provider should return matching A2A parts such as `data` with `mediaType: application/json` or `text` with `mediaType: text/plain`.
+1. For read-only local checks or clone-like requests such as "publish a new one like this profile", call `list_local_agent_profiles` first. It returns complete local profile metadata, capabilities, format contracts, and bound skill instructions. Do not call publish or update tools for `check`, `list`, `show`, or `status` requests.
+2. Before installing, publishing, or skipping any OpenClaw setup, call `inspect_openclaw_a2a_stack`. Treat "already installed" as true only when the inspection shows a working standard A2A Agent Card/endpoint and MOMOAI adapter market/protected endpoints for the target service.
+3. For publishing OpenClaw, call `publish_openclaw_a2a_service` instead of `publish_local_agent_listing` or manually chaining lower-level tools. The publish tool repeats local inspection internally before it installs or configures anything.
+4. Use `websocket` by default. Use `funnel` only when the user provides a public MOMOAI protected provider URL.
+5. Pass all capabilities explicitly. Every enabled priced capability must have a local skill binding with executable instructions.
+6. Keep capability-specific behavior in `skill.instructions`. The generic OpenClaw A2A skill router is the only supported capability execution layer; it selects the skill by `metadata.capability_id` and injects those instructions into OpenClaw.
+7. Keep MOMOAI pricing in the listing and market adapter metadata. Generic A2A Agent Cards should only describe communication capabilities.
+8. Publish publicly only after the provider is online. If provider verification fails, leave the listing delisted and explain the next action.
 
-## Commands
+If the plan says to ask, clarify, gather metadata, or select between service types, ask the concrete missing question and stop. Do not call publishing tools in that same turn.
 
-- `$agent openclaw install-a2a --profile <profile> --service websocket --upstream-path /a2a/<profile> --protected-path /momoai/a2a/<profile> --capabilities-file <path> --restart`
-- Add `--agent-id <id>` only when registering the OpenClaw service as a paid MOMOAI provider.
-- `$agent openclaw install-a2a --profile <profile> --agent-id <id> --service funnel --provider-url https://<public-host>/momoai/a2a/<profile> --standard-plugin-source <source> --restart`
-- If the public standard A2A plugin is already installed and working, add `--skip-standard-plugin`.
-- Use `--allow-unauthenticated` only for local protocol testing.
-- Test structured output with `$agent call <endpoint> '<input>' --capability <id> --output-mode application/json --json`.
+## Tools
+
+- `list_local_agent_profiles`: Read-only local profile inspection, including capabilities and bound skill instructions.
+- `inspect_openclaw_a2a_stack`: Read-only OpenClaw machine-state inspection. Use it to prove whether the target service already exposes standard A2A and MOMOAI adapter endpoints before deciding to install or skip setup.
+- `publish_openclaw_a2a_service`: High-level workflow for creating/updating the platform listing, inspecting local state, installing/configuring missing or required OpenClaw pieces, registering the provider, and optionally making the listing public.
+- `prepare_openclaw_a2a_market_service` and `$agent openclaw install-a2a`: Low-level install/debug path. Use only when the user explicitly asks for manual installation or troubleshooting.
 
 ## Notes
 
-- Every enabled priced capability must bind a local skill with `id` and `instructions`. The A2A request must carry `metadata.capability_id`; the standard OpenClaw A2A plugin uses it to select the local skill. If an agent-specific runtime plugin has registered that capability, the standard plugin receives its official A2A parts; otherwise it injects the skill instructions into the generic OpenClaw run.
-- Generic A2A skills should not contain MOMOAI pricing. Fixed `fixedTokens` values belong to MOMOAI listing/provider registration and the MOMOAI adapter market card.
-- The standard A2A endpoint remains usable by generic agents. The MOMOAI protected endpoint and WebSocket relay handler are for paid marketplace invocations.
+- The standard A2A OpenClaw plugin owns generic A2A communication and Agent Card discovery.
+- The OpenClaw A2A skill router owns mapping `metadata.capability_id` to local skill instructions.
+- The MOMOAI A2A adapter owns market metadata, platform invocation protection, and the WebSocket relay or Funnel protected endpoint.
 - Multiple OpenClaw services can coexist with distinct profiles and paths such as `/a2a/gomoku` plus `/momoai/a2a/gomoku`.
-- If curl is configured with a local proxy, use `--noproxy '*'` when testing `127.0.0.1` endpoints.
+- Test structured output with `$agent call <endpoint> '<input>' --capability <id> --output-mode application/json --json`.

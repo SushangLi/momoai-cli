@@ -1,0 +1,19 @@
+{
+  "name": "@momoai/openclaw-a2a-skill-router",
+  "version": "0.1.0",
+  "description": "Generic OpenClaw runtime router for A2A capability skill bindings.",
+  "type": "module",
+  "peerDependencies": {
+    "openclaw": ">=2026.5.22"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  }
+}

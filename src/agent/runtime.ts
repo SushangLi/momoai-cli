@@ -17,7 +17,54 @@ export type AgentRuntimeEvent =
 export type AgentRuntimeReporter = (event: AgentRuntimeEvent) => void;
 
 function messageContent(message: any) {
-  return typeof message?.content === 'string' ? message.content : JSON.stringify(message?.content ?? '');
+  if (typeof message?.content === 'string') return message.content;
+  if (message?.content === undefined || message?.content === null) return '';
+  return JSON.stringify(message.content);
+}
+
+const mutatingToolNames = new Set([
+  'exchange_buy',
+  'exchange_sell',
+  'publish_local_agent_listing',
+  'update_local_agent_listing',
+  'publish_openclaw_a2a_service',
+  'install_openclaw_a2a_plugin',
+  'prepare_openclaw_a2a_market_service',
+  'expose_agent_with_tailscale_funnel'
+]);
+
+function planNeedsUserInput(planText: string) {
+  const text = planText.toLowerCase();
+  return (
+    /\b(ask|clarify|request|confirm|choose|select)\b[\s\S]{0,80}\b(user|whether|option|preference|missing|required|metadata|service type|agent type)\b/.test(text) ||
+    /\b(gather|required|missing)\b[\s\S]{0,80}\b(metadata|capabilities|instructions|profile|service type|agent type)\b/.test(text) ||
+    /\bwait for (the )?user\b/.test(text)
+  );
+}
+
+function blockedMutatingToolResult(planText: string, toolName: string) {
+  if (!mutatingToolNames.has(toolName) || !planNeedsUserInput(planText)) return undefined;
+  return {
+    error: 'Tool call blocked: the current plan requires user clarification before any mutating action.',
+    needs_user_input: true,
+    next_action: 'Ask the user the concrete missing question from the plan and stop. Do not continue publishing, buying, selling, or updating until the user answers.'
+  };
+}
+
+function fallbackAssistantContent(input: AgentRunInput, planText: string, content: string) {
+  const trimmed = content.trim();
+  if (trimmed) return trimmed;
+  if (planNeedsUserInput(planText)) {
+    if (/\bpublish|agent|openclaw|profile\b/i.test(`${input.content}\n${planText}`)) {
+      return [
+        'I need one concrete choice before I continue.',
+        '',
+        'Please tell me the source profile or full capability definition to publish. For example: "clone openclaw as openclaw-test and publish it publicly", or provide the new profile name, public name, description, capabilities, and whether it should be public or delisted.'
+      ].join('\n');
+    }
+    return 'I need more information before continuing. Please answer the clarification requested in the plan.';
+  }
+  return 'I could not produce a final response for this turn. Please retry or rephrase the request.';
 }
 
 function usageFromResponse(response: any) {
@@ -173,6 +220,8 @@ export class AgentRuntime {
         '- Follow the approved plan before acting.',
         '- Use ReAct behavior internally: plan, act, observe, answer.',
         '- Tool calls and child agent calls are actions and must use the current plan id.',
+        '- If the plan says to ask, clarify, gather required metadata, or wait for user choice, do not call mutating tools in this turn. Ask the user a clear concrete question and stop.',
+        '- If required inputs are missing for a publish, buy, sell, update, or other mutating action, ask exactly what is missing instead of inventing values.',
         mode === 'remote_service'
           ? '- Remote service execution is result-priced by capability. Do not expose internal model usage as caller billing.'
           : '- Local execution has no CLI agent fee. Model and child agent calls use the local user account.',
@@ -226,10 +275,13 @@ export class AgentRuntime {
 
         requestMessages.push(message);
         messages.push(message);
+        let blockedMutation = false;
         for (const toolCall of toolCalls) {
           const name = toolCall.function?.name;
           this.report({ type: 'tool_call', name });
-          const result = await executeToolCall(name, toolCall.function?.arguments, this.confirmTool, {
+          const blockedResult = blockedMutatingToolResult(plan.text, name);
+          if (blockedResult) blockedMutation = true;
+          const result = blockedResult || await executeToolCall(name, toolCall.function?.arguments, this.confirmTool, {
             planId: plan.id,
             authToken: undefined
           });
@@ -242,6 +294,7 @@ export class AgentRuntime {
           requestMessages.push(toolMessage);
           messages.push(toolMessage);
         }
+        if (blockedMutation) break;
       }
     } catch (error) {
       if (error instanceof CliError) {
@@ -255,7 +308,7 @@ export class AgentRuntime {
     }
 
     const finalMessage = response?.choices?.[0]?.message;
-    const content = messageContent(finalMessage);
+    const content = fallbackAssistantContent(input, plan.text, messageContent(finalMessage));
     messages.push({ role: 'assistant', content });
 
     const finalUsage = ensureUsage(usage, requestMessages, content);

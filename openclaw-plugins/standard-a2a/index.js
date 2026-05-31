@@ -1,5 +1,3 @@
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { definePluginEntry } from 'openclaw/plugin-sdk/plugin-entry';
 
 const tasks = new Map();
@@ -36,28 +34,6 @@ function normalizeSkill(value, index) {
   };
 }
 
-function normalizeSkillBinding(value, index) {
-  const binding = isRecord(value) ? value : {};
-  const skill = isRecord(binding.skill) ? binding.skill : {};
-  const capabilityId = normalizeString(binding.capabilityId || binding.capability_id || binding.id, `capability_${index + 1}`);
-  const skillId = normalizeString(skill.id || binding.skillId || binding.skill_id, '');
-  const instructions = normalizeString(skill.instructions || binding.instructions, '');
-  if (!capabilityId || !skillId || !instructions) return undefined;
-  return {
-    capabilityId,
-    capabilityName: normalizeString(binding.capabilityName || binding.capability_name || binding.name, capabilityId),
-    capabilityDescription: normalizeString(binding.capabilityDescription || binding.capability_description || binding.description, ''),
-    inputModes: normalizeModes(binding.inputModes || binding.input_modes, ['text/plain', 'application/json']),
-    outputModes: normalizeModes(binding.outputModes || binding.output_modes, ['text/plain']),
-    skill: {
-      id: skillId,
-      name: normalizeString(skill.name || binding.skillName || binding.skill_name, skillId),
-      description: normalizeString(skill.description || binding.skillDescription || binding.skill_description, ''),
-      instructions
-    }
-  };
-}
-
 function defaultSkills() {
   return [
     {
@@ -77,10 +53,6 @@ function normalizeService(serviceId, rawService) {
   const endpointPath = normalizePath(service.endpointPath || service.upstreamPath, isDefault ? '/a2a' : `/a2a/${serviceId}`);
   const agentCardPath = normalizePath(service.agentCardPath, isDefault ? '/.well-known/agent-card.json' : `/.well-known/a2a/${serviceId}/agent-card.json`);
   const skills = Array.isArray(service.skills) ? service.skills.map(normalizeSkill).filter((skill) => skill.id && skill.name) : defaultSkills();
-  const skillBindings = Array.isArray(service.skillBindings)
-    ? service.skillBindings.map(normalizeSkillBinding).filter(Boolean)
-    : [];
-  const timeoutSeconds = Number(service.timeoutSeconds || 600);
   return {
     id: serviceId,
     enabled: service.enabled === undefined ? true : Boolean(service.enabled),
@@ -89,11 +61,7 @@ function normalizeService(serviceId, rawService) {
     name: normalizeString(service.name, 'OpenClaw A2A Agent'),
     description: normalizeString(service.description, 'OpenClaw exposed through the standard Agent2Agent protocol.'),
     version: normalizeString(service.version, '0.1.0'),
-    openclawBin: normalizeString(service.openclawBin, 'openclaw'),
-    openclawAgent: normalizeString(service.openclawAgent, ''),
-    timeoutSeconds: Number.isFinite(timeoutSeconds) && timeoutSeconds > 0 ? Math.floor(timeoutSeconds) : 600,
-    skills: skills.length ? skills : defaultSkills(),
-    skillBindings
+    skills: skills.length ? skills : defaultSkills()
   };
 }
 
@@ -233,40 +201,6 @@ function capabilityIdFromParams(params) {
   return String(params?.metadata?.capability_id || params?.metadata?.capabilityId || params?.capability_id || params?.capabilityId || '').trim();
 }
 
-function skillBindingForRequest(service, params) {
-  const capabilityId = capabilityIdFromParams(params);
-  if (!capabilityId) return { capabilityId: '', binding: undefined };
-  return {
-    capabilityId,
-    binding: service.skillBindings.find((item) => item.capabilityId === capabilityId)
-  };
-}
-
-function promptWithSkillBinding(content, binding) {
-  if (!binding) return content;
-  return [
-    'A2A capability selected by the caller:',
-    `capability_id: ${binding.capabilityId}`,
-    `capability_name: ${binding.capabilityName}`,
-    binding.capabilityDescription ? `capability_description: ${binding.capabilityDescription}` : '',
-    `input_modes: ${binding.inputModes.join(', ')}`,
-    `output_modes: ${binding.outputModes.join(', ')}`,
-    '',
-    'Local skill binding for this capability:',
-    `skill_id: ${binding.skill.id}`,
-    `skill_name: ${binding.skill.name}`,
-    binding.skill.description ? `skill_description: ${binding.skill.description}` : '',
-    '',
-    'Skill instructions:',
-    binding.skill.instructions,
-    '',
-    'Execute this request according to the selected capability and local skill. Do not guess another capability.',
-    '',
-    'User request:',
-    content
-  ].filter(Boolean).join('\n');
-}
-
 function normalizeRuntimeParts(value) {
   if (!Array.isArray(value)) return undefined;
   const parts = value.filter((part) => isRecord(part) && (typeof part.text === 'string' || part.data !== undefined || part.raw !== undefined || part.url));
@@ -277,20 +211,24 @@ function localRuntimeRegistry() {
   return globalThis[Symbol.for('openclaw.a2a.localRuntime.v1')];
 }
 
-async function invokeLocalRuntime(service, params, content, binding, taskMetadata) {
+async function invokeLocalRuntime(service, params, content, taskMetadata) {
+  const capabilityId = capabilityIdFromParams(params);
+  if (!capabilityId) throw new Error('A2A request requires metadata.capability_id.');
+
   const runtime = localRuntimeRegistry();
-  if (!runtime || typeof runtime.execute !== 'function') return undefined;
+  if (!runtime || typeof runtime.execute !== 'function') {
+    throw new Error('No OpenClaw A2A runtime is registered. Install and enable openclaw-a2a-skill-router.');
+  }
   const payload = await runtime.execute({
     service: { id: service.id },
-    capabilityId: binding?.capabilityId || '',
-    skill: binding?.skill,
+    capabilityId,
     acceptedOutputModes: acceptedOutputModesFromParams(params),
     content,
     message: params?.message,
     metadata: taskMetadata,
     request: params
   });
-  if (!payload) return undefined;
+  if (!payload) throw new Error('OpenClaw A2A runtime did not return a result.');
   const parts = normalizeRuntimeParts(payload.parts || payload.message?.parts);
   if (!parts) throw new Error('Local A2A runtime did not return A2A parts.');
   return {
@@ -298,53 +236,6 @@ async function invokeLocalRuntime(service, params, content, binding, taskMetadat
     parts,
     metadata: isRecord(payload.metadata) ? payload.metadata : {}
   };
-}
-
-function collectPayloadText(payloads) {
-  return (Array.isArray(payloads) ? payloads : [])
-    .map((payload) => payload && payload.isReasoning !== true && typeof payload.text === 'string' ? payload.text.trim() : '')
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-}
-
-function safeFileName(value) {
-  return String(value || 'session').replace(/[^A-Za-z0-9_.-]+/g, '-').slice(0, 120) || 'session';
-}
-
-async function invokeOpenClaw(api, service, input, contextId) {
-  if (!api.runtime?.agent?.runEmbeddedPiAgent) {
-    throw new Error('OpenClaw embedded agent runtime is not available to this plugin.');
-  }
-
-  const cfg = api.runtime.config?.current?.() || api.config;
-  const agentId = service.openclawAgent || undefined;
-  const sessionId = `a2a-${safeFileName(contextId)}`;
-  const stateDir = api.runtime.state?.resolveStateDir?.() || process.cwd();
-  const sessionDir = join(stateDir, 'a2a-sessions');
-  await mkdir(sessionDir, { recursive: true });
-
-  const workspaceDir = agentId
-    ? api.runtime.agent.resolveAgentWorkspaceDir(cfg, agentId)
-    : cfg?.agents?.defaults?.workspace || process.cwd();
-  const result = await api.runtime.agent.runEmbeddedPiAgent({
-    sessionId,
-    sessionKey: `agent:${agentId || service.id}:a2a:${contextId}`,
-    ...(agentId ? { agentId } : {}),
-    sessionFile: join(sessionDir, `${sessionId}.json`),
-    workspaceDir,
-    ...(agentId ? { agentDir: api.runtime.agent.resolveAgentDir(cfg, agentId) } : {}),
-    config: cfg,
-    prompt: input,
-    timeoutMs: service.timeoutSeconds * 1000,
-    runTimeoutOverrideMs: service.timeoutSeconds * 1000,
-    runId: `a2a-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    trigger: 'manual',
-    disableMessageTool: true,
-    sourceReplyDeliveryMode: 'none'
-  });
-
-  return collectPayloadText(result?.payloads) || 'OpenClaw task completed without text output.';
 }
 
 function buildAgentCard(req, service) {
@@ -377,17 +268,11 @@ async function handleSendMessage(api, service, requestId, params) {
   const content = contentFromMessage(params?.message);
   if (!content) return jsonRpcError(requestId, -32602, 'message/send requires at least one text, data, or file part');
 
-  const { capabilityId, binding } = skillBindingForRequest(service, params);
-  if (!capabilityId && service.skillBindings.length > 0) {
-    return jsonRpcError(requestId, -32602, 'message/send requires metadata.capability_id so OpenClaw can select the bound local skill');
-  }
-  if (capabilityId && !binding) {
-    return jsonRpcError(requestId, -32602, `Unknown or unbound capability_id: ${capabilityId}`);
-  }
+  const capabilityId = capabilityIdFromParams(params);
 
   const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
   const contextId = String(params?.metadata?.contextId || params?.contextId || taskId);
-  const taskMetadata = { contextId, ...(capabilityId ? { capability_id: capabilityId, skill_id: binding?.skill.id } : {}) };
+  const taskMetadata = { contextId, ...(capabilityId ? { capability_id: capabilityId } : {}) };
   const task = {
     id: taskId,
     contextId,
@@ -401,39 +286,19 @@ async function handleSendMessage(api, service, requestId, params) {
   tasks.set(taskId, task);
 
   try {
-    const runtimeResult = await invokeLocalRuntime(service, params, content, binding, taskMetadata);
-    if (runtimeResult) {
-      task.status = {
-        state: 'TASK_STATE_COMPLETED',
-        message: taskPartsMessage('agent', runtimeResult.parts, taskMetadata)
-      };
-      task.artifacts = [
-        {
-          artifactId: `artifact_${taskId}`,
-          name: runtimeResult.artifactName,
-          parts: runtimeResult.parts,
-          metadata: {
-            ...taskMetadata,
-            ...runtimeResult.metadata
-          }
-        }
-      ];
-      tasks.set(taskId, task);
-      return jsonRpcResult(requestId, task);
-    }
-
-    const reply = await invokeOpenClaw(api, service, promptWithSkillBinding(content, binding), contextId);
+    const runtimeResult = await invokeLocalRuntime(service, params, content, taskMetadata);
     task.status = {
       state: 'TASK_STATE_COMPLETED',
-      message: taskMessage('agent', reply, taskMetadata)
+      message: taskPartsMessage('agent', runtimeResult.parts, taskMetadata)
     };
     task.artifacts = [
       {
         artifactId: `artifact_${taskId}`,
-        name: 'result',
-        parts: [{ text: reply, mediaType: 'text/plain' }],
+        name: runtimeResult.artifactName,
+        parts: runtimeResult.parts,
         metadata: {
-          ...taskMetadata
+          ...taskMetadata,
+          ...runtimeResult.metadata
         }
       }
     ];

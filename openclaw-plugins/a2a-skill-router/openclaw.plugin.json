@@ -1,11 +1,11 @@
 {
-  "id": "openclaw-standard-a2a",
-  "name": "OpenClaw Standard A2A",
-  "description": "Exposes OpenClaw as a spec-compatible A2A agent endpoint.",
+  "id": "openclaw-a2a-skill-router",
+  "name": "OpenClaw A2A Skill Router",
+  "description": "Maps A2A capability ids to local OpenClaw skill instructions without changing the standard A2A communication plugin.",
   "activation": {
     "onStartup": true,
     "onConfigPaths": [
-      "plugins.entries.openclaw-standard-a2a"
+      "plugins.entries.openclaw-a2a-skill-router"
     ]
   },
   "configSchema": {
@@ -29,17 +29,34 @@
             "minLength": 1
           },
           "name": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           },
           "description": {
             "type": "string"
           },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "instructions": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "instructions"
+        ]
+      },
+      "skillBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capabilityName": {
+            "type": "string"
+          },
+          "capabilityDescription": {
+            "type": "string"
           },
           "inputModes": {
             "type": "array",
@@ -52,11 +69,14 @@
             "items": {
               "type": "string"
             }
+          },
+          "skill": {
+            "$ref": "#/$defs/skill"
           }
         },
         "required": [
-          "id",
-          "name"
+          "capabilityId",
+          "skill"
         ]
       },
       "service": {
@@ -66,28 +86,17 @@
           "enabled": {
             "type": "boolean"
           },
-          "endpointPath": {
-            "type": "string",
-            "minLength": 1
-          },
-          "agentCardPath": {
-            "type": "string",
-            "minLength": 1
-          },
-          "name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "description": {
+          "openclawAgent": {
             "type": "string"
           },
-          "version": {
-            "type": "string"
+          "timeoutSeconds": {
+            "type": "number",
+            "minimum": 1
           },
-          "skills": {
+          "skillBindings": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/skill"
+              "$ref": "#/$defs/skillBinding"
             }
           }
         }

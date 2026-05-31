@@ -44,14 +44,15 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 
 - publish_local_agent_listing: Create a delisted A2A remote-service draft for a local profile.
 - update_local_agent_listing: Update the profile's listing, capabilities, price, and visibility.
+- inspect_openclaw_a2a_stack: Read-only OpenClaw machine-state inspection before OpenClaw publishing.
 
 ## Workflow
 
 1. Plan before acting. Identify the target profile, public name, capabilities, fixed result-token prices, and whether the service should stay delisted.
 2. Create or update a local profile with a clear name, description, capability list, and fixedTokens for every enabled capability.
-3. Publish with publish_local_agent_listing. This creates a delisted draft and stores the returned agent id in the profile.
+3. Publish CLI-runtime profiles with publish_local_agent_listing. This creates a delisted draft and stores the returned agent id in the profile. Do not use generic publishing for provider_runtime external plus service_type websocket.
 4. Use service_type websocket by default. WebSocket is realtime and opens an outbound relay connection to MOMOAI, so no public inbound port is required.
-5. For a pure already-running public A2A endpoint, use provider_runtime external with service_type funnel and register its provider_url directly. For OpenClaw or another external agent with a MOMOAI adapter plugin, service_type websocket is allowed because the external agent owns the outbound relay connection itself. The CLI must not proxy it.
+5. For a pure already-running public A2A endpoint, use provider_runtime external with service_type funnel and register its provider_url directly. For OpenClaw or another external agent with a MOMOAI adapter plugin, service_type websocket is allowed only through a provider-specific workflow that first inspects the local machine and verifies or installs the adapter. The CLI must not proxy it.
 6. Ask the user to run the provider with "$agent connect --profile <profile> --service <websocket|funnel>" and keep that process online only when provider_runtime is cli. For OpenClaw, use "$agent openclaw install-a2a --service websocket" so the OpenClaw adapter stores relay credentials and connects directly.
 7. Only publish publicly after the provider is online, using update_local_agent_listing with public=true.
 8. Explain that failed or non-completed tasks are not charged; completed tasks charge the fixed token amount for the selected capability.
@@ -60,6 +61,8 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 
 - Do not publish a public listing before an online provider node exists.
 - Do not invent capability ids or fixed token prices. Ask the user when missing.
+- Do not call publishing or update tools in the same turn as a plan whose next step is to ask, clarify, gather metadata, or select a service type. Ask the user the concrete missing question and stop.
+- Do not publish a new agent from invented capabilities. A new listing must use capabilities copied from list_local_agent_profiles or capabilities explicitly provided by the user in the current conversation.
 - Each enabled capability must have positive fixedTokens.
 - Keep pricing in MOMOAI listing/provider registration or a MOMOAI market adapter record, not in generic A2A communication requirements.
 - One machine can host multiple profiles. Each running provider process is tied to one profile and one platform agent id.
@@ -69,32 +72,55 @@ This agent can help the user publish, update, and run local CLI agent profiles o
 
 const fallbackOpenClawA2aPublishingSkill = `# OpenClaw A2A Publishing Skill
 
-Use this when the user wants to publish a local OpenClaw agent on MOMOAI through A2A.
+Use this when the user wants the CLI to publish one or more capabilities from a local OpenClaw Gateway to MOMOAI.
 
-## Core Rule
+## Core Boundary
 
-Do not modify OpenClaw's official source code and do not use momoai-cli as the runtime proxy for OpenClaw. Split the work into two plugins:
+- This is a MOMOAI CLI operating skill, not an OpenClaw business skill.
+- Do not modify OpenClaw official source code.
+- Do not put momoai-cli in the runtime invocation path.
+- Do not create, install, or rely on capability-specific plugins for MOMOAI OpenClaw publishing.
+- Publish different OpenClaw abilities by configuring A2A capabilities with local skill instructions.
 
-- A public standard A2A OpenClaw plugin owns generic A2A communication and the standard Agent Card.
-- The MOMOAI A2A adapter plugin owns market metadata, platform invocation checks, and the protected provider URL used by momoai.pro.
+## Required Inputs
+
+Before publishing, identify:
+
+- Profile name, normally openclaw.
+- Local OpenClaw Gateway URL, normally http://127.0.0.1:18789.
+- Public agent name and description.
+- One or more capabilities, each with id, name, description, fixedTokens, input/output modes, and skill.instructions.
+- Whether the listing should become public after provider verification.
+
+Do not invent missing capability ids, prices, or instructions. Ask the user when they are missing.
 
 ## Workflow
 
-1. Plan before acting. Identify the local Gateway URL, MOMOAI profile, service type, standard A2A plugin source, priced MOMOAI capabilities, and each capability's bound local skill. Use websocket by default; require a public provider URL only for funnel.
-2. Probe the local port, usually http://127.0.0.1:18789, for /.well-known/agent-card.json and the A2A JSON-RPC endpoint.
-3. If standard A2A is missing, use prepare_openclaw_a2a_market_service or "$agent openclaw install-a2a" to install the bundled spec-compatible standard A2A plugin. If the user already manages an official or custom A2A plugin, pass standard_plugin_source or set skip_standard_plugin.
-4. Install/configure the MOMOAI adapter plugin. It must use a protected_path that differs from the standard upstream_path. A MOMOAI agent_id is not required for local standard A2A communication. For websocket market publishing, the CLI registers the provider node and writes relayUrl/providerToken into OpenClaw config only after an agent_id exists; OpenClaw then connects directly to MOMOAI.
-5. Restart OpenClaw Gateway after plugin changes, or run with --restart.
-6. Publish/update the MOMOAI listing with provider_runtime external. For websocket, no inbound provider_url is required. For funnel, provider_url must be the public MOMOAI protected provider endpoint, not the raw local CLI.
-7. Only make the listing public after the standard A2A endpoint works locally and the MOMOAI provider node is online.
+1. For read-only local checks or clone-like requests such as "publish a new one like this profile", call list_local_agent_profiles first. It returns complete local profile metadata, capabilities, format contracts, and bound skill instructions. Do not call publish or update tools for check, list, show, or status requests.
+2. Before installing, publishing, or skipping any OpenClaw setup, call inspect_openclaw_a2a_stack. Treat "already installed" as true only when inspection shows working standard A2A and MOMOAI adapter endpoints for the target service.
+3. For publishing OpenClaw, call publish_openclaw_a2a_service instead of publish_local_agent_listing or manually chaining lower-level tools.
+4. Use websocket by default. Use funnel only when the user provides a public MOMOAI protected provider URL.
+5. Pass all capabilities explicitly. Every enabled priced capability must have a local skill binding with executable instructions.
+6. Keep capability-specific behavior in skill.instructions. The generic OpenClaw A2A skill router is the only supported capability execution layer; it selects the skill by metadata.capability_id and injects those instructions into OpenClaw.
+7. Keep MOMOAI pricing in the listing and market adapter metadata. Generic A2A Agent Cards should only describe communication capabilities.
+8. Publish publicly only after the provider is online. If provider verification fails, leave the listing delisted and explain the next action.
+
+If the plan says to ask, clarify, gather metadata, or select between service types, ask the concrete missing question and stop. Do not call publishing tools in that same turn.
+
+## Tools
+
+- list_local_agent_profiles: Read-only local profile inspection, including capabilities and bound skill instructions.
+- inspect_openclaw_a2a_stack: Read-only local gateway inspection. Use it before publishing OpenClaw so plugin state is discovered, not assumed.
+- publish_openclaw_a2a_service: High-level workflow for creating/updating the platform listing, inspecting local state, installing/configuring missing or required OpenClaw pieces, registering the provider, and optionally making the listing public.
+- prepare_openclaw_a2a_market_service and $agent openclaw install-a2a: Low-level install/debug path. Use only when the user explicitly asks for manual installation or troubleshooting.
 
 ## Notes
 
-- Without a standard A2A plugin, OpenClaw 18789 may return 404 for /.well-known/agent-card.json and HTML or 404 for /a2a.
-- Every enabled priced capability must bind a local skill with id and executable instructions. A2A requests carry metadata.capability_id, and the OpenClaw A2A plugin uses it to select that local skill before running the agent.
-- Generic A2A skills should not contain MOMOAI pricing. FixedTokens belong to MOMOAI listing/provider registration and the MOMOAI adapter market card.
-- Keep platform JWT auth enabled for public services. Use --allow-unauthenticated only for local protocol testing.
-- Multiple OpenClaw services can coexist by using different profiles and distinct upstream/protected paths.`;
+- The standard A2A OpenClaw plugin owns generic A2A communication and Agent Card discovery.
+- The OpenClaw A2A skill router owns mapping metadata.capability_id to local skill instructions.
+- The MOMOAI A2A adapter owns market metadata, platform invocation protection, and the WebSocket relay or Funnel protected endpoint.
+- Multiple OpenClaw services can coexist with distinct profiles and paths such as /a2a/gomoku plus /momoai/a2a/gomoku.
+- Test structured output with $agent call <endpoint> '<input>' --capability <id> --output-mode application/json --json.`;
 
 function readFirstExisting(paths: string[], fallback: string) {
   for (const path of paths) {

@@ -1,5 +1,6 @@
 import { loadConfig, normalizeAgentProviderRuntime, normalizeAgentServiceType, normalizeCapabilitySkill, normalizeProfileName, resolveAgentConfig, saveAgentProfile } from './config.js';
-import { installOpenClawA2a } from './agent/openclaw.js';
+import { inspectOpenClawA2aStack, installOpenClawA2a } from './agent/openclaw.js';
+import { listLocalAgentProfiles, normalizeOpenClawCapabilityList, publishOpenClawA2aService } from './agent/openclaw-publishing.js';
 import { exposeViaTailscaleFunnel } from './agent/tailscale.js';
 import { callPlatformAgent, exchangeBalance, exchangeBuy, exchangeListings, exchangeOwned, exchangeSell, exploreAgents, publishLocalAgentListing, updateLocalAgentListing } from './services.js';
 import type { AgentCapability, ResolvedAgentConfig } from './config.js';
@@ -111,8 +112,41 @@ export const momoTools = [
   {
     type: 'function',
     function: {
+      name: 'list_local_agent_profiles',
+      description: 'Read-only local inspection. List complete MOMOAI CLI agent profiles configured on this machine, including capabilities, format contracts, and bound local skill instructions. Use for check/list/show/clone local agents; do not use publish/update tools for read-only checks.',
+      parameters: {
+        type: 'object',
+        properties: {}
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'inspect_openclaw_a2a_stack',
+      description: 'Read-only local OpenClaw inspection. Probe the target gateway paths to determine whether the standard A2A endpoint and MOMOAI adapter are already available before installing or publishing. Use this before publishing OpenClaw; do not assume plugins are present.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string', default: 'openclaw', description: 'Local profile/service name. Used as the default service_id.' },
+          service_type: { type: 'string', enum: ['websocket', 'funnel'], default: 'websocket' },
+          gateway_base_url: { type: 'string', description: 'Local OpenClaw Gateway base URL, usually http://127.0.0.1:18789.' },
+          openclaw_bin: { type: 'string', description: 'OpenClaw executable. Defaults to openclaw.' },
+          service_id: { type: 'string' },
+          upstream_path: { type: 'string', description: 'Standard A2A endpoint path to probe.' },
+          protected_path: { type: 'string', description: 'MOMOAI protected provider endpoint path to probe.' },
+          agent_card_path: { type: 'string', description: 'Agent Card path to probe.' },
+          market_path: { type: 'string', description: 'MOMOAI market card path to probe.' },
+          oasf_path: { type: 'string' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'publish_local_agent_listing',
-      description: 'Create a delisted MOMOAI A2A remote-service listing for one local CLI agent profile.',
+      description: 'Create a delisted MOMOAI A2A remote-service listing for one local CLI agent profile. Do not use this for external websocket agents such as OpenClaw; those require provider-specific inspection/adapter setup.',
       parameters: {
         type: 'object',
         properties: {
@@ -209,8 +243,71 @@ export const momoTools = [
   {
     type: 'function',
     function: {
+      name: 'publish_openclaw_a2a_service',
+      description: 'High-level OpenClaw publishing workflow. It first inspects the local machine, then creates/updates a MOMOAI A2A listing, installs/configures only missing or required OpenClaw A2A pieces, registers the provider, and optionally makes it public. Use this for publishing one local OpenClaw service with one or more capability skill bindings. Do not include capability-specific plugin handlers.',
+      parameters: {
+        type: 'object',
+        properties: {
+          profile: { type: 'string', default: 'openclaw' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          agent_id: { type: 'number' },
+          service_type: { type: 'string', enum: ['websocket', 'funnel'], default: 'websocket' },
+          provider_url: { type: 'string', description: 'Required only for funnel; public MOMOAI protected provider endpoint.' },
+          price: { type: 'number', description: 'Credits per 1K direct-purchase tokens.' },
+          available_tokens: { type: 'number' },
+          public: { type: 'boolean', default: false, description: 'Make the platform listing public after provider online verification.' },
+          restart: { type: 'boolean', default: true, description: 'Restart OpenClaw gateway after plugin changes.' },
+          gateway_base_url: { type: 'string', description: 'Local OpenClaw Gateway base URL, usually http://127.0.0.1:18789.' },
+          openclaw_bin: { type: 'string', description: 'OpenClaw executable. Defaults to openclaw.' },
+          standard_plugin_source: { type: 'string', description: 'Optional override for the standard A2A OpenClaw plugin source.' },
+          skip_standard_plugin: { type: 'boolean', default: false },
+          service_id: { type: 'string' },
+          upstream_path: { type: 'string' },
+          protected_path: { type: 'string' },
+          agent_card_path: { type: 'string' },
+          market_path: { type: 'string' },
+          oasf_path: { type: 'string' },
+          require_platform_auth: { type: 'boolean', default: true },
+          forward_authorization: { type: 'boolean', default: false },
+          capabilities: {
+            type: 'array',
+            description: 'Capabilities to expose. Each capability is implemented by OpenClaw through the generic A2A skill router using the bound skill instructions; no capability-specific plugin handler is allowed.',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                fixedTokens: { type: 'number' },
+                enabled: { type: 'boolean' },
+                inputModes: { type: 'array', items: { type: 'string' } },
+                outputModes: { type: 'array', items: { type: 'string' } },
+                formatContract: { type: 'object' },
+                skill: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    description: { type: 'string' },
+                    instructions: { type: 'string', description: 'Executable instructions OpenClaw receives when this capability_id is invoked.' }
+                  },
+                  required: ['id', 'instructions']
+                }
+              },
+              required: ['id', 'name', 'fixedTokens', 'skill']
+            }
+          }
+        },
+        required: ['capabilities']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'prepare_openclaw_a2a_market_service',
-      description: 'Probe an OpenClaw/agent port, install the bundled spec-compatible standard A2A OpenClaw plugin when A2A is missing, then install the MOMOAI market adapter plugin. The CLI is not used as a runtime proxy.',
+      description: 'Low-level OpenClaw setup. Inspect an OpenClaw/agent port, install the bundled spec-compatible standard A2A OpenClaw plugin only when the standard A2A endpoint is missing, configure the generic A2A skill router, then install/configure the MOMOAI market adapter when needed. The CLI is not used as a runtime proxy.',
       parameters: {
         type: 'object',
         properties: {
@@ -368,7 +465,7 @@ function intArg(args: Record<string, unknown>, name: string) {
 }
 
 async function confirmIfNeeded(name: string, args: Record<string, unknown>, confirm?: ConfirmTool) {
-  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing' || name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service' || name === 'expose_agent_with_tailscale_funnel';
+  const isTrade = name === 'exchange_buy' || name === 'exchange_sell' || name === 'publish_local_agent_listing' || name === 'update_local_agent_listing' || name === 'publish_openclaw_a2a_service' || name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service' || name === 'expose_agent_with_tailscale_funnel';
   if (!isTrade || loadConfig().permissionMode === 'full') return true;
   if (!confirm) return false;
   return confirm(name, args);
@@ -386,6 +483,9 @@ function capabilitiesArg(value: unknown): AgentCapability[] | undefined {
     inputModes: modesArg(capability.inputModes || capability.input_modes),
     outputModes: modesArg(capability.outputModes || capability.output_modes),
     formatContract: capability.formatContract || capability.format_contract,
+    handler: capability.handler || capability.localHandler || capability.local_handler,
+    ...(capability.pluginId || capability.plugin_id ? { pluginId: capability.pluginId || capability.plugin_id } : {}),
+    ...(capability.pluginSource || capability.plugin_source ? { pluginSource: capability.pluginSource || capability.plugin_source } : {}),
     skill: normalizeCapabilitySkill(capability)
   })).filter((capability) => capability.id && capability.name);
   if (!capabilities.length) throw new Error('capabilities must include at least one item');
@@ -459,6 +559,15 @@ function validateBillableCapabilities(agent: ResolvedAgentConfig) {
   }
 }
 
+function rejectExternalWebsocketGenericListing(agent: ResolvedAgentConfig, toolName: string) {
+  if (agent.providerRuntime !== 'external' || agent.serviceType !== 'websocket') return;
+  throw new Error(
+    `${toolName} cannot publish or update an external websocket provider directly. ` +
+      'Use publish_openclaw_a2a_service for OpenClaw so the CLI first inspects the local gateway and configures the standard A2A plugin, generic skill router, MOMOAI adapter, and relay credentials. ' +
+      'For an already-public external A2A endpoint, use service_type=funnel with provider_url instead.'
+  );
+}
+
 export async function executeToolCall(
   name: string,
   rawArgs: string | undefined,
@@ -503,6 +612,23 @@ export async function executeToolCall(
     if (name === 'exchange_sell') {
       return await exchangeSell(intArg(args, 'agent_id'), numberArg(args, 'tokens'), numberArg(args, 'price'), options.authToken);
     }
+    if (name === 'list_local_agent_profiles') {
+      return listLocalAgentProfiles();
+    }
+    if (name === 'inspect_openclaw_a2a_stack') {
+      const profile = typeof args.profile === 'string' && args.profile.trim() ? normalizeProfileName(args.profile) || args.profile.trim() : 'openclaw';
+      return await inspectOpenClawA2aStack({
+        openclawBin: typeof args.openclaw_bin === 'string' ? args.openclaw_bin : undefined,
+        gatewayBaseUrl: typeof args.gateway_base_url === 'string' ? args.gateway_base_url : undefined,
+        serviceType: normalizeAgentServiceType(args.service_type || args.serviceType || 'websocket'),
+        serviceId: typeof args.service_id === 'string' ? args.service_id : profile,
+        upstreamPath: typeof args.upstream_path === 'string' ? args.upstream_path : undefined,
+        protectedPath: typeof args.protected_path === 'string' ? args.protected_path : undefined,
+        agentCardPath: typeof args.agent_card_path === 'string' ? args.agent_card_path : undefined,
+        marketPath: typeof args.market_path === 'string' ? args.market_path : undefined,
+        oasfPath: typeof args.oasf_path === 'string' ? args.oasf_path : undefined
+      });
+    }
     if (name === 'call_platform_agent') {
       return await callPlatformAgent(intArg(args, 'agent_id'), String(args.content || ''), options.authToken, {
         capabilityId: typeof args.capability_id === 'string' ? args.capability_id : typeof args.capabilityId === 'string' ? args.capabilityId : undefined,
@@ -513,6 +639,7 @@ export async function executeToolCall(
     }
     if (name === 'publish_local_agent_listing') {
       const agent = agentForTool(args);
+      rejectExternalWebsocketGenericListing(agent, name);
       validateBillableCapabilities(agent);
       const listing = await publishLocalAgentListing(agent, {
         name: agent.name,
@@ -526,6 +653,7 @@ export async function executeToolCall(
     }
     if (name === 'update_local_agent_listing') {
       const agent = agentForTool(args);
+      rejectExternalWebsocketGenericListing(agent, name);
       validateBillableCapabilities(agent);
       const isDelisted = args.public === true ? false : args.delisted === true ? true : undefined;
       const listing = await updateLocalAgentListing(agent, {
@@ -540,6 +668,35 @@ export async function executeToolCall(
       if (isDelisted !== undefined) agent.listing.isDelisted = isDelisted;
       saveToolAgent(agent);
       return listing;
+    }
+    if (name === 'publish_openclaw_a2a_service') {
+      const serviceType = normalizeAgentServiceType(args.service_type || args.serviceType || 'websocket');
+      return await publishOpenClawA2aService({
+        profile: typeof args.profile === 'string' ? args.profile : undefined,
+        name: typeof args.name === 'string' ? args.name : undefined,
+        description: typeof args.description === 'string' ? args.description : undefined,
+        agentId: args.agent_id === undefined ? undefined : intArg(args, 'agent_id'),
+        serviceType,
+        providerUrl: typeof args.provider_url === 'string' ? args.provider_url : typeof args.providerUrl === 'string' ? args.providerUrl : undefined,
+        price: args.price === undefined ? undefined : numberArg(args, 'price'),
+        availableTokens: args.available_tokens === undefined ? undefined : numberArg(args, 'available_tokens'),
+        public: args.public === true,
+        restart: args.restart === undefined ? true : Boolean(args.restart),
+        gatewayBaseUrl: typeof args.gateway_base_url === 'string' ? args.gateway_base_url : undefined,
+        openclawBin: typeof args.openclaw_bin === 'string' ? args.openclaw_bin : undefined,
+        standardPluginSource: typeof args.standard_plugin_source === 'string' ? args.standard_plugin_source : undefined,
+        skipStandardPlugin: args.skip_standard_plugin === true,
+        serviceId: typeof args.service_id === 'string' ? args.service_id : undefined,
+        upstreamPath: typeof args.upstream_path === 'string' ? args.upstream_path : undefined,
+        protectedPath: typeof args.protected_path === 'string' ? args.protected_path : undefined,
+        agentCardPath: typeof args.agent_card_path === 'string' ? args.agent_card_path : undefined,
+        marketPath: typeof args.market_path === 'string' ? args.market_path : undefined,
+        oasfPath: typeof args.oasf_path === 'string' ? args.oasf_path : undefined,
+        requirePlatformAuth: args.require_platform_auth === undefined ? true : Boolean(args.require_platform_auth),
+        forwardAuthorization: args.forward_authorization === true,
+        capabilities: normalizeOpenClawCapabilityList(args.capabilities),
+        authToken: options.authToken
+      });
     }
     if (name === 'install_openclaw_a2a_plugin' || name === 'prepare_openclaw_a2a_market_service') {
       const serviceType = normalizeAgentServiceType(args.service_type || args.serviceType || 'websocket');

@@ -235,6 +235,8 @@ $agent profile set <profile> [flags]
 $agent publish --profile <profile>
 $agent update-listing --profile <profile> --public
 $agent connect --profile <profile>
+$agent openclaw inspect-a2a --profile openclaw [--json]
+$agent openclaw publish --profile openclaw --capabilities-file <path> [--public]
 $agent card --profile <profile> --json
 $agent market-card --profile <profile> --json
 $agent call <agent-card-url-or-endpoint> <message> --capability <id>
@@ -243,19 +245,29 @@ $agent call <agent-card-url-or-endpoint> <message> --capability <id>
 ### OpenClaw integration
 
 ```text
-$agent openclaw install-a2a \
+$agent openclaw inspect-a2a --profile openclaw --service websocket
+
+$agent openclaw publish \
   --profile openclaw \
-  --agent-id <agent_id> \
+  --capabilities-file ./openclaw-capabilities.json \
   --service websocket \
+  --public \
   --restart
 ```
 
-This prepares:
+The inspect command is read-only. It probes the local OpenClaw Gateway for the
+standard A2A Agent Card/endpoint and the MOMOAI market adapter endpoints. The
+publish command repeats this preflight internally before it creates or updates
+the listing, then installs/configures only the required OpenClaw pieces:
 
 - standard A2A communication
+- generic OpenClaw A2A skill router
 - MOMOAI market adapter
 - capability pricing metadata
 - provider relay registration when an agent id is configured
+
+Use `$agent openclaw install-a2a` only for lower-level plugin installation or
+debugging. Normal publishing should use `$agent openclaw publish`.
 
 ## Local vs Remote Service Modes
 

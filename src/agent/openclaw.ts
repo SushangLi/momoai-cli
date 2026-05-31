@@ -49,12 +49,59 @@ export interface A2aProbeResult {
   error?: string;
 }
 
+export interface MomoaiAdapterProbeResult {
+  baseUrl: string;
+  protectedUrl: string;
+  marketCardUrl: string;
+  marketCardOk: boolean;
+  protectedRouteOk: boolean;
+  marketCard?: unknown;
+  protectedStatus?: number;
+  error?: string;
+}
+
+export interface OpenClawA2aStackInspection {
+  serviceId: string;
+  serviceType: AgentServiceType;
+  gatewayBaseUrl: string;
+  upstreamPath: string;
+  protectedPath: string;
+  agentCardPath: string;
+  marketPath: string;
+  oasfPath: string;
+  standardA2a: A2aProbeResult;
+  momoaiAdapter: MomoaiAdapterProbeResult;
+  pluginConfig: OpenClawPluginConfigProbeResult;
+  requirements: {
+    standardA2a: 'satisfied' | 'missing';
+    momoaiAdapter: 'satisfied' | 'missing';
+    skillRouter: 'satisfied' | 'missing';
+  };
+  stackReady: boolean;
+}
+
+export interface OpenClawPluginConfigProbeResult {
+  openclawBin: string;
+  configReadable: boolean;
+  standardA2aPluginEnabled: boolean;
+  standardA2aServiceConfigured: boolean;
+  skillRouterPluginEnabled: boolean;
+  skillRouterServiceConfigured: boolean;
+  momoaiAdapterPluginEnabled: boolean;
+  momoaiAdapterServiceConfigured: boolean;
+  error?: string;
+}
+
 function adapterPluginPath() {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'openclaw-plugins', 'momoai-a2a-adapter');
 }
 
 function standardA2aPluginPath() {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'openclaw-plugins', 'standard-a2a');
+}
+
+function skillRouterPluginPath() {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'openclaw-plugins', 'a2a-skill-router');
 }
 
 const DEFAULT_STANDARD_A2A_PLUGIN_SOURCE = process.env.MOMOAI_OPENCLAW_STANDARD_A2A_PLUGIN_SOURCE || standardA2aPluginPath();
@@ -164,30 +211,19 @@ function standardA2aSkillBindings(agent: ResolvedAgentConfig) {
     .filter((binding) => binding.skill?.id && binding.skill.instructions?.trim());
 }
 
-function handlerPluginEntries(agent: ResolvedAgentConfig) {
-  const entries = new Map<string, { source: string; config?: Record<string, unknown> }>();
-  for (const capability of agent.capabilities) {
-    const handler = capability.skill?.handler || capability.handler;
-    if (!handler?.pluginId || !handler.pluginSource) continue;
-    entries.set(handler.pluginId, {
-      source: handler.pluginSource,
-      ...(handler.pluginConfig ? { config: handler.pluginConfig } : {})
-    });
+function assertNoCapabilityHandlerPlugins(agent: ResolvedAgentConfig) {
+  const invalid = agent.capabilities
+    .filter((capability) =>
+      capability.enabled !== false &&
+      (capability.handler ||
+        capability.skill?.handler ||
+        (capability as any).pluginId ||
+        (capability as any).pluginSource)
+    )
+    .map((capability) => capability.id);
+  if (invalid.length) {
+    throw new Error(`OpenClaw A2A capabilities must use the generic skill router only. Remove handler/plugin fields from: ${invalid.join(', ')}`);
   }
-  return entries;
-}
-
-function handlerPluginPatch(agent: ResolvedAgentConfig) {
-  const entries = Object.fromEntries(Array.from(handlerPluginEntries(agent)).map(([pluginId, plugin]) => [
-    pluginId,
-    {
-      enabled: true,
-      ...(plugin.config ? { config: plugin.config } : {})
-    }
-  ]));
-  return Object.keys(entries).length
-    ? { plugins: { entries } }
-    : undefined;
 }
 
 function standardA2aPatch(agent: ResolvedAgentConfig, options: {
@@ -210,7 +246,7 @@ function standardA2aPatch(agent: ResolvedAgentConfig, options: {
                 description: agent.description,
                 version: agent.version,
                 skills: standardA2aSkills(agent),
-                skillBindings: standardA2aSkillBindings(agent)
+                skillBindings: null
               }
             }
           }
@@ -270,6 +306,28 @@ function adapterPatch(agent: ResolvedAgentConfig, options: {
   };
 }
 
+function skillRouterPatch(agent: ResolvedAgentConfig, options: {
+  serviceId: string;
+}) {
+  return {
+    plugins: {
+      entries: {
+        'openclaw-a2a-skill-router': {
+          enabled: true,
+          config: {
+            services: {
+              [options.serviceId]: {
+                enabled: true,
+                skillBindings: standardA2aSkillBindings(agent)
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
 async function registerOpenClawProvider(agent: ResolvedAgentConfig, options: {
   serviceType: AgentServiceType;
   providerUrl?: string;
@@ -295,11 +353,22 @@ async function registerOpenClawProvider(agent: ResolvedAgentConfig, options: {
   return (response as any).data || response;
 }
 
-async function readJson(url: string) {
-  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+async function readJsonRequest(url: string, init: RequestInit = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(init.headers || {})
+    }
+  });
   const text = await response.text();
   const json = text ? JSON.parse(text) : null;
   return { response, json };
+}
+
+async function readJson(url: string) {
+  return readJsonRequest(url);
 }
 
 function looksLikeAgentCard(value: any) {
@@ -314,6 +383,56 @@ function looksLikeAgentCard(value: any) {
 
 function looksLikeJsonRpc(value: any) {
   return Boolean(value && typeof value === 'object' && value.jsonrpc === '2.0' && ('result' in value || 'error' in value));
+}
+
+function looksLikeMarketCard(value: any) {
+  const market = value?.momoai_market || value;
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      (value.schema_version === 'momoai.a2a.market.v1' ||
+        Array.isArray(market?.capabilities) ||
+        typeof market?.provider_url === 'string')
+  );
+}
+
+function entryEnabled(entry: any) {
+  return Boolean(entry && typeof entry === 'object' && entry.enabled !== false);
+}
+
+function serviceEnabled(entry: any, serviceId: string) {
+  if (!entryEnabled(entry)) return false;
+  const service = entry?.config?.services?.[serviceId];
+  return Boolean(service && typeof service === 'object' && service.enabled !== false);
+}
+
+async function probeOpenClawPluginConfig(openclawBin: string, serviceId: string): Promise<OpenClawPluginConfigProbeResult> {
+  const result: OpenClawPluginConfigProbeResult = {
+    openclawBin,
+    configReadable: false,
+    standardA2aPluginEnabled: false,
+    standardA2aServiceConfigured: false,
+    skillRouterPluginEnabled: false,
+    skillRouterServiceConfigured: false,
+    momoaiAdapterPluginEnabled: false,
+    momoaiAdapterServiceConfigured: false
+  };
+
+  try {
+    const output = await execOpenClaw(openclawBin, ['config', 'get', 'plugins.entries', '--json']);
+    const entries = output.stdout.trim() ? JSON.parse(output.stdout) : {};
+    result.configReadable = true;
+    result.standardA2aPluginEnabled = entryEnabled(entries['openclaw-standard-a2a']);
+    result.standardA2aServiceConfigured = serviceEnabled(entries['openclaw-standard-a2a'], serviceId);
+    result.skillRouterPluginEnabled = entryEnabled(entries['openclaw-a2a-skill-router']);
+    result.skillRouterServiceConfigured = serviceEnabled(entries['openclaw-a2a-skill-router'], serviceId);
+    result.momoaiAdapterPluginEnabled = entryEnabled(entries['momoai-a2a-adapter']);
+    result.momoaiAdapterServiceConfigured = serviceEnabled(entries['momoai-a2a-adapter'], serviceId);
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+  }
+
+  return result;
 }
 
 export async function probeA2aEndpoint(options: {
@@ -364,7 +483,112 @@ export async function probeA2aEndpoint(options: {
   return result;
 }
 
+export async function probeMomoaiAdapter(options: {
+  baseUrl?: string;
+  protectedPath?: string;
+  marketPath?: string;
+} = {}): Promise<MomoaiAdapterProbeResult> {
+  const baseUrl = normalizeBaseUrl(options.baseUrl);
+  const protectedPath = normalizeRoutePath(options.protectedPath, '/momoai/a2a');
+  const marketPath = normalizeRoutePath(options.marketPath, '/.well-known/momoai-a2a/market-card.json');
+  const protectedUrl = `${baseUrl}${protectedPath}`;
+  const marketCardUrl = `${baseUrl}${marketPath}`;
+  const result: MomoaiAdapterProbeResult = {
+    baseUrl,
+    protectedUrl,
+    marketCardUrl,
+    marketCardOk: false,
+    protectedRouteOk: false
+  };
+
+  try {
+    const card = await readJson(marketCardUrl);
+    result.marketCard = card.json;
+    result.marketCardOk = card.response.ok && looksLikeMarketCard(card.json);
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+  }
+
+  try {
+    const probe = await readJsonRequest(protectedUrl, {
+      method: 'POST',
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'momoai_adapter_probe',
+        method: 'tasks/get',
+        params: { id: 'momoai_adapter_probe_missing_task' }
+      })
+    });
+    result.protectedStatus = probe.response.status;
+    result.protectedRouteOk = looksLikeJsonRpc(probe.json);
+  } catch (error) {
+    result.error = result.error || (error instanceof Error ? error.message : String(error));
+  }
+
+  return result;
+}
+
+export async function inspectOpenClawA2aStack(options: {
+  openclawBin?: string;
+  gatewayBaseUrl?: string;
+  serviceType?: AgentServiceType;
+  serviceId?: string;
+  upstreamPath?: string;
+  protectedPath?: string;
+  agentCardPath?: string;
+  marketPath?: string;
+  oasfPath?: string;
+} = {}): Promise<OpenClawA2aStackInspection> {
+  const openclawBin = options.openclawBin || 'openclaw';
+  const gatewayBaseUrl = normalizeBaseUrl(options.gatewayBaseUrl);
+  const serviceId = sanitizeServiceId(options.serviceId);
+  const serviceType = options.serviceType || 'websocket';
+  const isDefault = serviceId === 'default';
+  const upstreamPath = normalizeRoutePath(options.upstreamPath, isDefault ? '/a2a' : `/a2a/${serviceId}`);
+  const protectedPath = normalizeRoutePath(options.protectedPath, isDefault ? '/momoai/a2a' : `/momoai/a2a/${serviceId}`);
+  const agentCardPath = normalizeRoutePath(options.agentCardPath, isDefault ? '/.well-known/agent-card.json' : `/.well-known/a2a/${serviceId}/agent-card.json`);
+  const marketPath = normalizeRoutePath(options.marketPath, isDefault ? '/.well-known/momoai-a2a/market-card.json' : `/.well-known/momoai-a2a/${serviceId}/market-card.json`);
+  const oasfPath = normalizeRoutePath(options.oasfPath, isDefault ? '/.well-known/momoai-a2a/oasf-record.json' : `/.well-known/momoai-a2a/${serviceId}/oasf-record.json`);
+
+  const standardA2a = await probeA2aEndpoint({
+    baseUrl: gatewayBaseUrl,
+    endpointPath: upstreamPath,
+    agentCardPath
+  });
+  const momoaiAdapter = await probeMomoaiAdapter({
+    baseUrl: gatewayBaseUrl,
+    protectedPath,
+    marketPath
+  });
+  const pluginConfig = await probeOpenClawPluginConfig(openclawBin, serviceId);
+  const standardSatisfied = standardA2a.cardOk && standardA2a.endpointOk;
+  const adapterSatisfied = momoaiAdapter.marketCardOk && momoaiAdapter.protectedRouteOk;
+  const skillRouterSatisfied = pluginConfig.skillRouterServiceConfigured;
+
+  return {
+    serviceId,
+    serviceType,
+    gatewayBaseUrl,
+    upstreamPath,
+    protectedPath,
+    agentCardPath,
+    marketPath,
+    oasfPath,
+    standardA2a,
+    momoaiAdapter,
+    pluginConfig,
+    requirements: {
+      standardA2a: standardSatisfied ? 'satisfied' : 'missing',
+      momoaiAdapter: adapterSatisfied ? 'satisfied' : 'missing',
+      skillRouter: skillRouterSatisfied ? 'satisfied' : 'missing'
+    },
+    stackReady: standardSatisfied && adapterSatisfied && skillRouterSatisfied
+  };
+}
+
 export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: InstallOpenClawA2aOptions = {}) {
+  assertNoCapabilityHandlerPlugins(agent);
+
   const openclawBin = options.openclawBin || 'openclaw';
   const gatewayBaseUrl = normalizeBaseUrl(options.gatewayBaseUrl);
   const serviceId = sanitizeServiceId(options.serviceId || agent.profile);
@@ -376,20 +600,46 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
   const marketPath = normalizeRoutePath(options.marketPath, isDefault ? '/.well-known/momoai-a2a/market-card.json' : `/.well-known/momoai-a2a/${serviceId}/market-card.json`);
   const oasfPath = normalizeRoutePath(options.oasfPath, isDefault ? '/.well-known/momoai-a2a/oasf-record.json' : `/.well-known/momoai-a2a/${serviceId}/oasf-record.json`);
   const standardPluginSource = options.standardPluginSource || DEFAULT_STANDARD_A2A_PLUGIN_SOURCE;
-  const beforeProbe = await probeA2aEndpoint({
-    baseUrl: gatewayBaseUrl,
-    endpointPath: upstreamPath,
-    agentCardPath
+  const beforeInspection = await inspectOpenClawA2aStack({
+    openclawBin,
+    gatewayBaseUrl,
+    serviceType,
+    serviceId,
+    upstreamPath,
+    protectedPath,
+    agentCardPath,
+    marketPath,
+    oasfPath
   });
+  const beforeProbe = beforeInspection.standardA2a;
+  const beforeAdapterProbe = beforeInspection.momoaiAdapter;
 
   let standardPluginInstalled = false;
   let standardPluginConfigured = false;
-  if (!options.skipStandardPlugin) {
+  let standardPluginReused = false;
+  let skillRouterPluginInstalled = false;
+  let skillRouterConfigured = false;
+  let skillRouterPluginReused = false;
+  let adapterPluginInstalled = false;
+  let adapterPluginConfigured = false;
+  let adapterPluginReused = false;
+  const standardA2aWasAlreadyAvailable = beforeProbe.cardOk && beforeProbe.endpointOk;
+  const momoaiAdapterWasAlreadyAvailable = beforeAdapterProbe.marketCardOk && beforeAdapterProbe.protectedRouteOk;
+  if (options.skipStandardPlugin) {
+    if (!standardA2aWasAlreadyAvailable) {
+      throw new Error('Cannot skip the standard OpenClaw A2A plugin: local inspection did not find a working A2A Agent Card and JSON-RPC endpoint.');
+    }
+    standardPluginReused = true;
+  } else {
     if (!standardPluginSource) {
       throw new Error('Standard OpenClaw A2A plugin source is required. Pass --standard-plugin-source or set MOMOAI_OPENCLAW_STANDARD_A2A_PLUGIN_SOURCE.');
     }
-    await execOpenClaw(openclawBin, ['plugins', 'install', standardPluginSource, '--force']);
-    standardPluginInstalled = true;
+    if (standardA2aWasAlreadyAvailable) {
+      standardPluginReused = true;
+    } else {
+      await execOpenClaw(openclawBin, ['plugins', 'install', standardPluginSource, '--force']);
+      standardPluginInstalled = true;
+    }
     await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(standardA2aPatch(agent, {
       serviceId,
       upstreamPath,
@@ -398,14 +648,20 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
     standardPluginConfigured = true;
   }
 
-  const handlerPlugins = handlerPluginEntries(agent);
-  for (const plugin of handlerPlugins.values()) {
-    await access(plugin.source);
-    await execOpenClaw(openclawBin, ['plugins', 'install', plugin.source, '--force']);
-  }
-  const handlerPatch = handlerPluginPatch(agent);
-  if (handlerPatch) {
-    await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(handlerPatch, null, 2)}\n`);
+  const skillBindings = standardA2aSkillBindings(agent);
+  if (skillBindings.length) {
+    const skillRouterRoot = skillRouterPluginPath();
+    await access(skillRouterRoot);
+    if (beforeInspection.pluginConfig.skillRouterPluginEnabled) {
+      skillRouterPluginReused = true;
+    } else {
+      await execOpenClaw(openclawBin, ['plugins', 'install', skillRouterRoot, '--force']);
+      skillRouterPluginInstalled = true;
+    }
+    await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(skillRouterPatch(agent, {
+      serviceId
+    }), null, 2)}\n`);
+    skillRouterConfigured = true;
   }
 
   const adapterRoot = adapterPluginPath();
@@ -417,7 +673,12 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
     : undefined;
 
   await access(adapterRoot);
-  await execOpenClaw(openclawBin, ['plugins', 'install', adapterRoot, '--force']);
+  if (momoaiAdapterWasAlreadyAvailable) {
+    adapterPluginReused = true;
+  } else {
+    await execOpenClaw(openclawBin, ['plugins', 'install', adapterRoot, '--force']);
+    adapterPluginInstalled = true;
+  }
   await execOpenClaw(openclawBin, ['config', 'patch', '--stdin'], `${JSON.stringify(adapterPatch(agent, {
     serviceId,
     serviceType,
@@ -431,6 +692,7 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
     requirePlatformAuth: options.requirePlatformAuth ?? true,
     forwardAuthorization: options.forwardAuthorization ?? false
   }), null, 2)}\n`);
+  adapterPluginConfigured = true;
 
   if (options.restart) {
     await execOpenClaw(openclawBin, ['gateway', 'restart']);
@@ -439,15 +701,29 @@ export async function installOpenClawA2a(agent: ResolvedAgentConfig, options: In
   const afterProbe = options.restart
     ? await probeA2aEndpoint({ baseUrl: gatewayBaseUrl, endpointPath: upstreamPath, agentCardPath })
     : undefined;
+  const afterAdapterProbe = options.restart
+    ? await probeMomoaiAdapter({ baseUrl: gatewayBaseUrl, protectedPath, marketPath })
+    : undefined;
 
   return {
     serviceId,
     standardPluginSource,
     standardPluginInstalled,
     standardPluginConfigured,
-    standardA2aWasAlreadyAvailable: beforeProbe.cardOk && beforeProbe.endpointOk,
+    standardPluginReused,
+    skillRouterPluginInstalled,
+    skillRouterConfigured,
+    skillRouterPluginReused,
+    adapterPluginInstalled,
+    adapterPluginConfigured,
+    adapterPluginReused,
+    standardA2aWasAlreadyAvailable,
+    momoaiAdapterWasAlreadyAvailable,
+    inspection: beforeInspection,
     beforeProbe,
+    beforeAdapterProbe,
     afterProbe,
+    afterAdapterProbe,
     serviceType,
     providerRegistration,
     upstreamPath,
