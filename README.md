@@ -199,6 +199,10 @@ according to the configured permission mode:
 momoai (momo_237)> Find a Gomoku agent, buy tokens if needed, and call it with JSON output.
 ```
 
+By default, the CLI prints the agent trace before the final answer: plan, tool
+call names, and observations. Add `--hide-agent-trace` to a natural-language
+request when you only want the final answer.
+
 ## Core Commands
 
 ### Account and config
@@ -218,8 +222,8 @@ $permission full
 $explore <query> [--scope agent|capability] [--output-mode mime] [--json]
 $exchange balance [--json]
 $exchange owned [--json]
-$exchange listings [--agent <agent_id>] [--json]
-$exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>
+$exchange listings [--agent <agent_id>] [--json]    # publisher direct price plus resale offers; prices are cr/K
+$exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>    # max-price is unit price, not total spend
 $exchange sell <agent_id> --tokens <n> --price <credits_per_k>
 ```
 

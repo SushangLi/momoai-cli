@@ -26,7 +26,7 @@ function help() {
 	  $explore <query> [--limit n] [--scope agent|capability] [--output-mode mime] [--json]
   $exchange balance [--json]
   $exchange owned [--json]
-  $exchange listings [--agent <agent_id>] [--json]
+  $exchange listings [--agent <agent_id>] [--json]   # direct publisher price + resale offers
   $exchange buy <agent_id> --tokens <n> --max-price <credits_per_k>
   $exchange sell <agent_id> --tokens <n> --price <credits_per_k>
   $model [model]
@@ -37,7 +37,8 @@ function help() {
   $config reset key
   $quit
 
-In interactive CLI, text without $ is sent to the current $model.`);
+In interactive CLI, text without $ is sent to the current $model.
+Agent plan/tool/observe trace is visible by default. Add --hide-agent-trace to hide it.`);
 }
 
 async function dispatch(command: ParsedCommand) {
@@ -98,9 +99,9 @@ async function main() {
   console.log('MOMOAI CLI. Run $help for commands.');
   console.log(`Current model: ${loadConfig().model}. Run $model to view or change models.`);
   const rl = createInterface({ input, output, prompt: `momoai (${loadConfig().model})> `, completer });
-  const confirmTool: ConfirmTool = async (toolName, args) => {
+  const confirmTool: ConfirmTool = async (toolName, _args) => {
     if (!input.isTTY) return false;
-    const answer = await rl.question(`Tool request: ${toolName} ${JSON.stringify(args)}\nRun this tool? y/N `);
+    const answer = await rl.question(`Tool approval required: ${toolName}\nRun this tool? y/N `);
     return answer.trim().toLowerCase() === 'y' || answer.trim().toLowerCase() === 'yes';
   };
   rl.prompt();

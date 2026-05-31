@@ -16,6 +16,7 @@ export async function exchangeCommand(command: ParsedCommand) {
       return printJson(balance);
     }
     console.log(`credits: ${balance.credits} (purchase ${balance.purchase}, gift ${balance.gift})`);
+    console.log(`spendable: ${balance.spendable_credits} (purchase ${balance.spendable_purchase}, gift ${balance.spendable_gift})`);
     console.log('bought agents and token balances:');
     table(balance.tokens);
     return;

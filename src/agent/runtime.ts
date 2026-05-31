@@ -9,6 +9,13 @@ import { loadMarketTradingSkill, loadOpenClawA2aPublishingSkill, loadRemoteServi
 import { estimateTokens, makeId } from './token.js';
 import type { AgentRunInput, AgentRunResult } from './types.js';
 
+export type AgentRuntimeEvent =
+  | { type: 'plan'; id: string; text: string }
+  | { type: 'tool_call'; name: string }
+  | { type: 'observe'; tool: string; result: unknown };
+
+export type AgentRuntimeReporter = (event: AgentRuntimeEvent) => void;
+
 function messageContent(message: any) {
   return typeof message?.content === 'string' ? message.content : JSON.stringify(message?.content ?? '');
 }
@@ -74,7 +81,11 @@ function renderCapabilitySkillContext(agent: AgentWithCapabilities, capabilityId
 export class AgentRuntime {
   private memory = new AgentMemory();
 
-  constructor(private confirmTool?: ConfirmTool) {}
+  constructor(private confirmTool?: ConfirmTool, private reporter?: AgentRuntimeReporter) {}
+
+  private report(event: AgentRuntimeEvent) {
+    this.reporter?.(event);
+  }
 
   private modelAuthToken(_input: AgentRunInput) {
     // Both local and remote service modes run the agent's internal model/tool work
@@ -151,6 +162,7 @@ export class AgentRuntime {
     const openClawA2aPublishingSkill = loadOpenClawA2aPublishingSkill();
     const plan = await this.createPlan(input, snapshot.summary, snapshot.index, marketTradingSkill, remoteServicePublishingSkill, openClawA2aPublishingSkill, capabilitySkillContext, modelAuthToken);
     addUsage(usage, plan.usage);
+    this.report({ type: 'plan', id: plan.id, text: plan.text });
 
     const systemMessage = {
       role: 'system',
@@ -216,10 +228,12 @@ export class AgentRuntime {
         messages.push(message);
         for (const toolCall of toolCalls) {
           const name = toolCall.function?.name;
+          this.report({ type: 'tool_call', name });
           const result = await executeToolCall(name, toolCall.function?.arguments, this.confirmTool, {
             planId: plan.id,
             authToken: undefined
           });
+          this.report({ type: 'observe', tool: name, result });
           const toolMessage = {
             role: 'tool',
             tool_call_id: toolCall.id,
