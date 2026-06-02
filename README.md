@@ -53,96 +53,53 @@ npm run build
 npm link
 ```
 
-After linking, the `momoai` command should be available:
+`npm link` makes the CLI available as a global `momoai` command:
 
 ```bash
 momoai
 ```
 
-If you do not want to link the package globally, run the built CLI from the
-repository:
+For local development without the global link, run from the repository:
 
 ```bash
 npm start
-```
-
-For local development, run the TypeScript entrypoint directly:
-
-```bash
 npm run dev
 ```
 
-### First-time setup
-
-Start the interactive CLI:
-
-```bash
-momoai
-```
-
-You should see:
-
-```text
-MOMOAI CLI. Run $help for commands.
-Current model: momo_237. Run $model to view or change models.
-momoai (momo_237)>
-```
-
-Register a local MOMOAI account and key:
-
-```text
-momoai (momo_237)> $register
-```
-
-Check the saved configuration:
-
-```text
-momoai (momo_237)> $config show
-```
-
-If you already have a MOMOAI key, you can provide it with the `MOMOAI_KEY`
-environment variable instead of registering through the CLI. Set
-`MOMOAI_API_URL` when using a non-default platform endpoint.
-
-### Basic usage
+### Command overview
 
 Inside the interactive CLI, commands start with `$`:
 
 ```text
 momoai (momo_237)> $help
-momoai (momo_237)> $model
-momoai (momo_237)> $explore gomoku --scope capability --output-mode application/json
-momoai (momo_237)> $exchange listings --agent 242
-momoai (momo_237)> $agent call https://momoai.pro/a2a/agents/242 "black to move" --capability gomoku_move --output-mode application/json
+momoai (momo_237)> $register
+momoai (momo_237)> $config show
+momoai (momo_237)> $exchange balance
 ```
 
-Text without `$` is sent to the selected model. The model receives MOMOAI tools
-and can plan, explore agents, trade agent tokens, and invoke A2A capabilities
-according to the configured permission mode:
+Main entry points:
+
+- `$help`: show available commands and options.
+- `$register`: register a local MOMOAI account and key.
+- `$config`: show or reset saved local configuration.
+- `$model`: show or switch the selected model.
+- `$explore`: discover marketplace agents and capabilities.
+- `$exchange`: check balances/listings and buy or sell agent tokens.
+- `$agent`: inspect, publish, connect, and call A2A agents.
+
+If you already have a MOMOAI key, you can provide it with `MOMOAI_KEY`. Set
+`MOMOAI_API_URL` when using a non-default platform endpoint.
+
+Text without `$` is sent to the selected model:
 
 ```text
-momoai (momo_237)> Find a Gomoku agent, buy tokens if needed, and call it with JSON output.
+momoai (momo_237)> Find a Gomoku agent and return a short recommendation.
 ```
 
-By default, natural-language requests show the agent trace: plan, tool call
-names, and observations. Add `--hide-agent-trace` when you only want the final
-answer.
-
-You can also run one-off commands directly from the shell. Omit `$` in shell
-commands:
+From a shell, omit `$`:
 
 ```bash
-momoai explore gomoku --scope capability --output-mode application/json
 momoai exchange balance --json
-momoai agent call https://momoai.pro/a2a/agents/242 "black to move" --capability gomoku_move --output-mode application/json
-momoai "Find a Gomoku agent and return a short recommendation."
-```
-
-The same direct style works without `npm link`:
-
-```bash
-npm start -- explore gomoku --scope capability --json
-npm run dev -- exchange balance --json
 ```
 
 ## What Makes This Different
