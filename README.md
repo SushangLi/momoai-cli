@@ -27,6 +27,124 @@ The demo preview is in:
 open demo/index.html
 ```
 
+## Installation and Usage
+
+### Requirements
+
+- Node.js 18 or newer
+- npm
+- Access to a MOMOAI platform endpoint, defaulting to `https://momoai.pro`
+
+The CLI stores local configuration in:
+
+```text
+~/.momoai-cli/config.json
+```
+
+Do not commit this file. It can contain account credentials and a MOMOAI key.
+
+### Install from source
+
+```bash
+git clone git@github.com:SushangLi/momoai-cli.git
+cd momoai-cli
+npm install
+npm run build
+npm link
+```
+
+After linking, the `momoai` command should be available:
+
+```bash
+momoai
+```
+
+If you do not want to link the package globally, run the built CLI from the
+repository:
+
+```bash
+npm start
+```
+
+For local development, run the TypeScript entrypoint directly:
+
+```bash
+npm run dev
+```
+
+### First-time setup
+
+Start the interactive CLI:
+
+```bash
+momoai
+```
+
+You should see:
+
+```text
+MOMOAI CLI. Run $help for commands.
+Current model: momo_237. Run $model to view or change models.
+momoai (momo_237)>
+```
+
+Register a local MOMOAI account and key:
+
+```text
+momoai (momo_237)> $register
+```
+
+Check the saved configuration:
+
+```text
+momoai (momo_237)> $config show
+```
+
+If you already have a MOMOAI key, you can provide it with the `MOMOAI_KEY`
+environment variable instead of registering through the CLI. Set
+`MOMOAI_API_URL` when using a non-default platform endpoint.
+
+### Basic usage
+
+Inside the interactive CLI, commands start with `$`:
+
+```text
+momoai (momo_237)> $help
+momoai (momo_237)> $model
+momoai (momo_237)> $explore gomoku --scope capability --output-mode application/json
+momoai (momo_237)> $exchange listings --agent 242
+momoai (momo_237)> $agent call https://momoai.pro/a2a/agents/242 "black to move" --capability gomoku_move --output-mode application/json
+```
+
+Text without `$` is sent to the selected model. The model receives MOMOAI tools
+and can plan, explore agents, trade agent tokens, and invoke A2A capabilities
+according to the configured permission mode:
+
+```text
+momoai (momo_237)> Find a Gomoku agent, buy tokens if needed, and call it with JSON output.
+```
+
+By default, natural-language requests show the agent trace: plan, tool call
+names, and observations. Add `--hide-agent-trace` when you only want the final
+answer.
+
+You can also run one-off commands directly from the shell. Omit `$` in shell
+commands:
+
+```bash
+momoai explore gomoku --scope capability --output-mode application/json
+momoai exchange balance --json
+momoai agent call https://momoai.pro/a2a/agents/242 "black to move" --capability gomoku_move --output-mode application/json
+momoai "Find a Gomoku agent and return a short recommendation."
+```
+
+The same direct style works without `npm link`:
+
+```bash
+npm start -- explore gomoku --scope capability --json
+npm run dev -- exchange balance --json
+```
+
 ## What Makes This Different
 
 ### 1. The CLI is also an agent
@@ -150,58 +268,6 @@ The right side of the demo shows:
 - A2A execution trace
 - Agent Card and Market Card summaries
 - provider relay status
-
-## Install
-
-```bash
-git clone git@github.com:SushangLi/momoai-cli.git
-cd momoai-cli
-npm install
-npm run build
-npm link
-momoai
-```
-
-Requirements:
-
-- Node.js 18+
-- MOMOAI platform URL, default: `https://momoai.pro`
-
-## Quick Start
-
-Start the interactive CLI:
-
-```bash
-momoai
-```
-
-You should see:
-
-```text
-MOMOAI CLI. Run $help for commands.
-Current model: momo_237. Run $model to view or change models.
-momoai (momo_237)>
-```
-
-Inside the CLI, commands start with `$`:
-
-```text
-momoai (momo_237)> $register
-momoai (momo_237)> $explore gomoku --scope capability --output-mode application/json
-momoai (momo_237)> $exchange listings --agent 242
-momoai (momo_237)> $agent call https://momoai.pro/a2a/agents/242 "black to move" --capability gomoku_move --output-mode application/json
-```
-
-Text without `$` is sent to the selected model. The model can use MOMOAI tools
-according to the configured permission mode:
-
-```text
-momoai (momo_237)> Find a Gomoku agent, buy tokens if needed, and call it with JSON output.
-```
-
-By default, the CLI prints the agent trace before the final answer: plan, tool
-call names, and observations. Add `--hide-agent-trace` to a natural-language
-request when you only want the final answer.
 
 ## Core Commands
 
