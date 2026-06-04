@@ -57,7 +57,7 @@ const rules: Record<string, Rule> = {
   }
 };
 
-const configResetKeys = ['key'];
+const configResetKeys = ['key', 'password'];
 
 function currentToken(line: string) {
   if (line.endsWith(' ')) return '';
@@ -100,6 +100,12 @@ export function completer(line: string): [string[], string] {
   const firstArg = args[0];
   if (command === 'config' && firstArg === 'reset' && activeArgIndex === 1) {
     return completeFrom(configResetKeys, activeToken);
+  }
+  if (command === 'config' && firstArg === 'reset' && args[1] === 'password') {
+    if (activeToken.startsWith('--') || activeToken === '') {
+      return completeFrom(['--old-password'], activeToken);
+    }
+    return [[], activeToken];
   }
 
   if (activeToken.startsWith('--')) {

@@ -1,43 +1,89 @@
 import { getConfigPath, loadConfig, saveConfig } from '../config.js';
 import { MomoClient } from '../client.js';
-import type { ParsedCommand } from '../parser.js';
+import { flagString, type ParsedCommand } from '../parser.js';
+import { randomBytes } from 'node:crypto';
+
+function randomPassword() {
+  return randomBytes(18).toString('base64url');
+}
 
 export async function configCommand(command: ParsedCommand) {
   const [action, key, ...rest] = command.args;
 
   if (action === 'reset') {
-    if (key !== 'key' || rest.length > 0) {
-      throw new Error('Usage: $config reset key');
-    }
-
-    const config = loadConfig();
-    if (!config.account?.email || !config.account.password) {
-      throw new Error('No account email/password stored. Run $register first.');
-    }
-
-    const authToken = await loginForAuthToken(config.account.email, config.account.password);
-    const response = await new MomoClient().request<any>('/api/user/momoai-key', {
-      method: 'POST',
-      auth: false,
-      authToken,
-      body: { action: 'reset' }
-    });
-
-    const momoKey = response.data?.user_momoai_key;
-    if (!momoKey) {
-      throw new Error('Key reset succeeded but no MOMO key was returned.');
-    }
-
-    saveConfig({
-      account: {
-        ...config.account,
-        momoKey
+    if (key === 'key') {
+      if (rest.length > 0) {
+        throw new Error('Usage: $config reset key');
       }
-    });
 
-    console.log('MOMO key reset succeeded.');
-    console.log(`momo_key: ${momoKey}`);
-    return;
+      const config = loadConfig();
+      if (!config.account?.email || !config.account.password) {
+        throw new Error('No account email/password stored. Run $register first.');
+      }
+
+      const authToken = await loginForAuthToken(config.account.email, config.account.password);
+      const response = await new MomoClient().request<any>('/api/user/momoai-key', {
+        method: 'POST',
+        auth: false,
+        authToken,
+        body: { action: 'reset' }
+      });
+
+      const momoKey = response.data?.user_momoai_key;
+      if (!momoKey) {
+        throw new Error('Key reset succeeded but no MOMO key was returned.');
+      }
+
+      saveConfig({
+        account: {
+          ...config.account,
+          momoKey
+        }
+      });
+
+      console.log('MOMO key reset succeeded.');
+      console.log(`momo_key: ${momoKey}`);
+      return;
+    }
+
+    if (key === 'password') {
+      if (rest.length > 1) {
+        throw new Error('Usage: $config reset password [new_password] [--old-password old_password]');
+      }
+
+      const newPassword = rest[0] || randomPassword();
+      if (newPassword.length < 6) {
+        throw new Error('Password must be at least 6 characters.');
+      }
+
+      const config = loadConfig();
+      if (!config.account?.momoKey) {
+        throw new Error('No MOMO key stored. Run $register first.');
+      }
+
+      const oldPassword = flagString(command.flags, 'old-password') || flagString(command.flags, 'old_password') || config.account.password;
+      if (!oldPassword) {
+        throw new Error('Old password is required. Use --old-password old_password.');
+      }
+
+      await new MomoClient().request<any>('/api/cli/auth/password', {
+        method: 'POST',
+        body: { oldPassword, newPassword }
+      });
+
+      saveConfig({
+        account: {
+          ...config.account,
+          password: newPassword
+        }
+      });
+
+      console.log('Password reset succeeded.');
+      console.log(`password: ${newPassword}`);
+      return;
+    }
+
+    throw new Error('Usage: $config reset key | $config reset password [new_password] [--old-password old_password]');
   }
 
   if (!action || action === 'show') {
@@ -74,7 +120,7 @@ export async function configCommand(command: ParsedCommand) {
     return;
   }
 
-  throw new Error('Usage: $config show | $config reset key');
+  throw new Error('Usage: $config show | $config reset key | $config reset password [new_password] [--old-password old_password]');
 }
 
 async function loginForAuthToken(email: string, password: string): Promise<string> {

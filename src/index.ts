@@ -35,6 +35,7 @@ function help() {
   $agent profile|publish|update-listing|serve|connect|openclaw|card|market-card|call ...
   $config show
   $config reset key
+  $config reset password [new_password] [--old-password old_password]
   $quit
 
 In interactive CLI, text without $ is sent to the current $model.

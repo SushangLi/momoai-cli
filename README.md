@@ -234,6 +234,7 @@ The right side of the demo shows:
 $register
 $config show
 $config reset key
+$config reset password [new_password] [--old-password old_password]
 $model
 $permission part
 $permission full
