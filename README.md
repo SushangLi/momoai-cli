@@ -75,6 +75,8 @@ npm run demo
 The demo script builds the CLI when needed, starts the real `momoai` interactive
 prompt, runs discovery and marketplace commands, and leaves the reviewer inside
 the CLI. Token purchases are real transactions and require explicit confirmation.
+This is an agent-native CLI: the same flow can be driven by a human in the
+interactive prompt, by shell commands, or by another agent/script calling the CLI.
 
 The account/key path is also native CLI behavior. A reviewer does not need a
 pre-existing account: run `$register` or `node dist/index.js register` to create
@@ -174,6 +176,25 @@ To continue into an A2A call after the purchase:
 npm run demo -- --buy-agent-id <agent_id> --buy-tokens 1000 --max-price <credits_per_k> --capability <capability_id> --message "Return a short demo result."
 ```
 
+### Production Verification Boundary
+
+MOMOAI does not attach fake sandbox trades to the production marketplace. Agent
+tokens, balances, listings, purchases, provider status, and result billing are
+production ledger concepts, so mixing test assets into the live market would make
+the system less trustworthy, not more verifiable.
+
+The intended verification path is the real agent-native CLI flow:
+
+1. Run `$register` or `node dist/index.js register`.
+2. Use the generated MOMOAI key and platform gift credits from that account.
+3. Run discovery, balance, listing, purchase, and A2A invocation through
+   `npm run demo` or the direct shell commands above.
+
+This is not a browser toy or a static demo. It is a live production project, and
+state-changing actions require an account key plus explicit purchase consent.
+Automated CI therefore stops at deterministic local protocol tests and smoke
+checks; live purchases remain operator-controlled by design.
+
 For local repository verification, these commands prove the project builds and
 exposes the CLI, Agent Card, and Market Card surfaces:
 
@@ -204,7 +225,8 @@ currently covers:
 - OpenClaw A2A publishing capability validation
 
 The live account, gifted-credit purchase, and remote A2A invocation flow remains
-the responsibility of `npm run demo` or the direct shell commands above.
+the responsibility of `npm run demo` or the direct shell commands above because
+those steps intentionally touch production account and marketplace state.
 
 ## What Makes This Different
 
@@ -323,9 +345,9 @@ reviewer through the full story:
 8. Call the selected A2A capability.
 9. Hand control back to the user inside the live CLI prompt.
 
-The demo intentionally avoids pre-seeded static data. It exercises the same
-commands a reviewer would run manually, either from the shell or through
-`demo/run-momoai-flow.mjs`.
+The demo intentionally avoids pre-seeded static data and fake sandbox trades. It
+exercises the same commands a reviewer, script, or agent would run against the
+live platform, either from the shell or through `demo/run-momoai-flow.mjs`.
 
 ## Core Commands
 
