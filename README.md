@@ -6,9 +6,11 @@ MOMOAI CLI is not only a command-line wrapper around a model. It is designed as 
 marketplace-native agent runtime: it can plan, use tools, trade agent tokens, call
 other A2A agents, and publish local agents as remotely callable services.
 
-## Hackathon Summary
+## Product Summary
 
-MOMOAI CLI demonstrates a distributed agent marketplace workflow:
+MOMOAI CLI is the operational command surface for MOMOAI's live agent
+marketplace. Hackathon walkthroughs use the same path, but the primary workflow
+is built for customers, providers, and automation agents:
 
 1. A user enters the interactive CLI.
 2. The built-in agent plans before acting.
@@ -21,7 +23,7 @@ MOMOAI CLI demonstrates a distributed agent marketplace workflow:
 8. The platform handles discovery, auth, relay, and result-based billing while the
    provider can still run on the owner's local machine.
 
-Public verification:
+Public product surfaces:
 
 - MOMOAI platform: https://www.momoai.pro/
 - Video walkthrough: https://youtu.be/GEmBt9agjBE
@@ -66,21 +68,22 @@ npm start
 npm run dev
 ```
 
-To run the reviewer demo from source:
+To run the live CLI flow from source:
 
 ```bash
 npm run demo
 ```
 
 The demo script builds the CLI when needed, starts the real `momoai` interactive
-prompt, runs discovery and marketplace commands, and leaves the reviewer inside
-the CLI. Token purchases are real transactions and require explicit confirmation.
-This is an agent-native CLI: the same flow can be driven by a human in the
-interactive prompt, by shell commands, or by another agent/script calling the CLI.
+prompt, runs discovery and marketplace commands, and leaves the user inside the
+CLI. Token purchases are real transactions and require explicit confirmation.
+The CLI is agent-native in two ways: it contains its own planning/tool loop, and
+every marketplace step can also be called from shell commands by an external
+agent or automation script.
 
-The account/key path is also native CLI behavior. A reviewer does not need a
-pre-existing account: run `$register` or `node dist/index.js register` to create
-a demo account, receive a MOMOAI key, and use the platform gift credits returned
+The account/key path is also native CLI behavior. A user does not need a
+pre-provisioned key: run `$register` or `node dist/index.js register` to create a
+MOMOAI account, receive a MOMOAI key, and use the platform gift credits returned
 by the account flow for marketplace validation.
 
 Credentials are saved to `~/.momoai-cli/config.json` and masked in command
@@ -141,7 +144,7 @@ node dist/index.js agent call https://momoai.pro/a2a/agents/<agent_id> "Return a
 
 ## Demo and Verification
 
-The project has three public verification paths:
+The project has three public onboarding and verification paths:
 
 1. Watch the recorded workflow: https://youtu.be/GEmBt9agjBE
 2. Visit the live public platform: https://www.momoai.pro/
@@ -178,20 +181,17 @@ npm run demo -- --buy-agent-id <agent_id> --buy-tokens 1000 --max-price <credits
 
 ### Production Verification Boundary
 
-MOMOAI does not attach fake sandbox trades to the production marketplace. Agent
-tokens, balances, listings, purchases, provider status, and result billing are
-production ledger concepts, so mixing test assets into the live market would make
-the system less trustworthy, not more verifiable.
-
-The intended verification path is the real agent-native CLI flow:
+MOMOAI is a live marketplace service, so agent tokens, balances, listings,
+purchases, provider status, and result billing are production ledger state. The
+open CLI does not route synthetic sandbox trades into that ledger. Live verification
+uses the same customer path as normal use:
 
 1. Run `$register` or `node dist/index.js register`.
 2. Use the generated MOMOAI key and platform gift credits from that account.
 3. Run discovery, balance, listing, purchase, and A2A invocation through
    `npm run demo` or the direct shell commands above.
 
-This is not a browser toy or a static demo. It is a live production project, and
-state-changing actions require an account key plus explicit purchase consent.
+State-changing actions require an account key plus explicit purchase consent.
 Automated CI therefore stops at deterministic local protocol tests and smoke
 checks; live purchases remain operator-controlled by design.
 
@@ -247,6 +247,11 @@ final answer
 
 This makes the CLI a working agent runtime, not only a collection of manual
 commands.
+
+It can also be driven from the outside by another agent. Every marketplace step
+exposed in the interactive prompt is available as a direct shell command, so
+external automation can run registration, discovery, balance, listing, purchase,
+and A2A invocation without a browser UI.
 
 ### 2. Agents can trade and spend marketplace tokens
 
@@ -332,8 +337,8 @@ MOMOAI Market Card, OpenClaw adapter, runnable CLI demo flow
 
 ## Demo Flow
 
-The runnable demo in `demo/run-momoai-flow.mjs` starts the real CLI and guides the
-reviewer through the full story:
+The runnable demo in `demo/run-momoai-flow.mjs` starts the real CLI and guides a
+user through the full live flow:
 
 1. Start `momoai`.
 2. Show the real command surface with `$help`.
@@ -345,7 +350,7 @@ reviewer through the full story:
 8. Call the selected A2A capability.
 9. Hand control back to the user inside the live CLI prompt.
 
-The demo intentionally avoids pre-seeded static data and fake sandbox trades. It
+The demo intentionally avoids pre-seeded static data and synthetic sandbox trades. It
 exercises the same commands a reviewer, script, or agent would run against the
 live platform, either from the shell or through `demo/run-momoai-flow.mjs`.
 
