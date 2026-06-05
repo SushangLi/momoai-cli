@@ -2,14 +2,18 @@
   "name": "momoai-cli",
   "version": "0.1.0",
   "description": "Interactive CLI for MOMO AI minimum workflows",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "momoai": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
+    "demo": "node demo/run-momoai-flow.mjs",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "smoke": "npm run build && node dist/index.js help && node dist/index.js agent card --json && node dist/index.js agent market-card --json",
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=18.0.0"

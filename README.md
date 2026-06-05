@@ -21,11 +21,11 @@ MOMOAI CLI demonstrates a distributed agent marketplace workflow:
 8. The platform handles discovery, auth, relay, and result-based billing while the
    provider can still run on the owner's local machine.
 
-The demo preview is in:
+Public verification:
 
-```bash
-open demo/index.html
-```
+- MOMOAI platform: https://www.momoai.pro/
+- Video walkthrough: https://youtu.be/GEmBt9agjBE
+- Runnable CLI demo flow: `npm run demo`
 
 ## Installation and Usage
 
@@ -66,6 +66,16 @@ npm start
 npm run dev
 ```
 
+To run the reviewer demo from source:
+
+```bash
+npm run demo
+```
+
+The demo script builds the CLI when needed, starts the real `momoai` interactive
+prompt, runs discovery and marketplace commands, and leaves the reviewer inside
+the CLI. Token purchases are real transactions and require explicit confirmation.
+
 ### Command overview
 
 Inside the interactive CLI, commands start with `$`:
@@ -101,6 +111,44 @@ From a shell, omit `$`:
 ```bash
 momoai exchange balance --json
 ```
+
+## Demo and Verification
+
+The project has three public verification paths:
+
+1. Watch the recorded workflow: https://youtu.be/GEmBt9agjBE
+2. Visit the live public platform: https://www.momoai.pro/
+3. Run the local CLI flow:
+
+```bash
+npm ci
+npm run demo
+```
+
+`npm run demo` is not a static HTML preview. It launches the actual CLI and walks
+through:
+
+- `$help`
+- optional `$register` when no MOMOAI key is configured
+- `$explore gomoku --scope capability --output-mode application/json --json` when a key is configured
+- `$exchange balance --json` when a key is configured
+- `$exchange listings --json` when a key is configured
+- optional `$exchange buy ...` after the user types `BUY`
+- optional `$agent call ...` after the user chooses an A2A capability
+
+For no-key review, these commands prove the repository builds and exposes real
+CLI surfaces without requiring marketplace credentials:
+
+```bash
+npm test
+npm run smoke
+```
+
+`npm run smoke` builds the TypeScript project and checks:
+
+- `node dist/index.js help`
+- `node dist/index.js agent card --json`
+- `node dist/index.js agent market-card --json`
 
 ## What Makes This Different
 
@@ -194,37 +242,32 @@ This keeps basic agent communication separate from marketplace transaction rules
 | Provider transport | WebSocket relay by default, Tailscale Funnel optional |
 | Agent integration | OpenClaw adapter, external provider runtime, provider executor gateway |
 | Data exchange | HTTP/JSON, JSON-RPC-style A2A calls, WebSocket relay messages |
-| Demo UI | Static HTML, CSS, JavaScript |
+| Demo automation | Node.js script that drives the real CLI flow |
 
 Short version for hackathon forms:
 
 ```text
 ReAct-style agent loop, TypeScript/Node.js, A2A, WebSocket relay,
-MOMOAI Market Card, OpenClaw adapter, static HTML/CSS/JavaScript demo
+MOMOAI Market Card, OpenClaw adapter, runnable CLI demo flow
 ```
 
 ## Demo Flow
 
-The static demo in `demo/index.html` shows the full story:
+The runnable demo in `demo/run-momoai-flow.mjs` starts the real CLI and guides the
+reviewer through the full story:
 
 1. Start `momoai`.
-2. Ask the CLI agent to find a Gomoku agent.
-3. The model writes a plan.
-4. The model uses `explore_agents`.
-5. The model checks token balance and listings.
-6. The model buys agent tokens through the market.
-7. The model calls the selected A2A capability.
-8. The local OpenClaw service is prepared and listed.
-9. The provider goes online through the WebSocket relay.
+2. Show the real command surface with `$help`.
+3. Register a real MOMOAI account when no key is configured.
+4. Discover Gomoku-capable A2A agents by capability and output mode when a key is available.
+5. Check authenticated balance and token holdings.
+6. List publisher and resale offers.
+7. Optionally buy agent tokens after an explicit `BUY` confirmation.
+8. Optionally call the selected A2A capability.
+9. Hand control back to the user inside the live CLI prompt.
 
-The right side of the demo shows:
-
-- multiple agent-token markets
-- candlestick movement after trades
-- a changing order book
-- A2A execution trace
-- Agent Card and Market Card summaries
-- provider relay status
+The demo intentionally avoids pre-seeded static data. It exercises the same
+commands a reviewer would run manually.
 
 ## Core Commands
 
@@ -363,9 +406,11 @@ src/
   tools.ts        Tools exposed to the model
   services.ts     MOMOAI platform API client helpers
 demo/
-  index.html      Hackathon demo preview
-  styles.css
-  app.js
+  run-momoai-flow.mjs
+tests/
+  *.test.mjs      Node test suite for parser and card behavior
+.github/
+  workflows/ci.yml
 ```
 
 ## Notes
