@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MOMOAI CLI Hackathon Demo</title>
+    <link rel="stylesheet" href="./styles.css?v=live-market" />
+  </head>
+  <body>
+    <main class="demo-app" aria-label="MOMOAI CLI feature demo">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark">M</div>
+          <div>
+            <p class="eyebrow">Hackathon demo preview</p>
+            <h1>momoai-cli marketplace agent demo</h1>
+          </div>
+        </div>
+        <div class="topbar-metrics" aria-label="demo summary">
+          <button class="flow-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" tabindex="-1">
+            Demo flow
+          </button>
+          <span><strong id="metricTokens">3,840</strong> tokens</span>
+          <span><strong id="metricLatency">2.8s</strong> relay</span>
+          <span><strong id="metricStatus">online</strong></span>
+        </div>
+      </header>
+
+      <section class="stage" aria-label="interactive demo">
+        <button class="flow-trigger flow-float" id="flowButton" type="button" aria-haspopup="dialog" aria-expanded="false">
+          Demo flow
+        </button>
+        <div class="flow-backdrop" id="flowBackdrop" hidden></div>
+        <aside class="flow-coach" id="flowCoach" aria-live="polite">
+          <span id="flowCoachStep">Step 1 / 5</span>
+          <strong id="flowCoachTitle">Discover by capability</strong>
+          <p id="flowCoachCopy">Search real Agent Card capabilities, not just names or tags.</p>
+        </aside>
+        <nav class="scenario-rail" id="flowModal" aria-label="demo steps" aria-modal="true" role="dialog">
+          <div class="rail-title">
+            <div class="rail-title-copy">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16M4 12h16M4 19h16"></path>
+              </svg>
+              <span>Demo flow</span>
+            </div>
+            <button class="icon-button modal-close" id="flowCloseButton" type="button" aria-label="Close demo flow">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="stepList" class="step-list"></div>
+        </nav>
+
+        <section class="terminal-zone" aria-label="mac terminal preview">
+          <div class="terminal-window">
+            <div class="terminal-chrome">
+              <div class="traffic-lights" aria-hidden="true">
+                <span class="light red"></span>
+                <span class="light yellow"></span>
+                <span class="light green"></span>
+              </div>
+              <div class="terminal-title">momoai-cli — zsh — 120x36</div>
+              <div class="terminal-badge" id="sceneBadge">market scout</div>
+            </div>
+            <div class="terminal-body" id="terminalOutput" aria-live="polite"></div>
+          </div>
+
+          <div class="control-strip" aria-label="demo controls">
+            <button class="icon-button primary" id="playButton" type="button" aria-label="Play demo">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 5 11 7-11 7V5Z"></path>
+              </svg>
+            </button>
+            <button class="icon-button" id="pauseButton" type="button" aria-label="Pause demo">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14M16 5v14"></path>
+              </svg>
+            </button>
+            <button class="icon-button" id="nextButton" type="button" aria-label="Next step">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 4 10 8-10 8V4ZM19 5v14"></path>
+              </svg>
+            </button>
+            <button class="icon-button" id="resetButton" type="button" aria-label="Reset demo">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7M3 4v6h6"></path>
+              </svg>
+            </button>
+            <div class="timeline" aria-label="demo progress">
+              <div class="timeline-fill" id="timelineFill"></div>
+            </div>
+            <span class="timecode" id="timecode">00:00 / 01:20</span>
+          </div>
+        </section>
+
+        <aside class="inspector" aria-label="market and agent status">
+          <section class="status-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">MOMOAI Market</p>
+                <h2 id="inspectorTitle">Capability search</h2>
+              </div>
+              <span class="status-dot online" id="providerDot"></span>
+            </div>
+            <div class="metric-grid">
+              <div>
+                <span>Provider</span>
+                <strong id="providerStatus">online</strong>
+              </div>
+              <div>
+                <span>Billing</span>
+                <strong id="billingMode">success only</strong>
+              </div>
+              <div>
+                <span>Transport</span>
+                <strong id="transportMode">WebSocket</strong>
+              </div>
+              <div>
+                <span>Capability</span>
+                <strong id="capabilityPrice">1000 tokens</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="market-desk" aria-label="agent marketplace trading desk">
+            <div class="watchlist" id="watchlist" aria-label="agent token watchlist"></div>
+
+            <section class="market-pane active" id="paneMarket" aria-label="market chart and order book">
+              <div class="ticker-row">
+                <div>
+                  <span class="ticker-label">Selected agent token</span>
+                  <strong id="tickerPair">OPENCLAW.GOMOKU</strong>
+                </div>
+                <div class="ticker-price">
+                  <strong id="tickerPrice">5.42</strong>
+                  <span id="tickerChange">+8.4%</span>
+                </div>
+              </div>
+
+              <svg class="kline-chart" id="klineChart" viewBox="0 0 360 180" role="img" aria-label="agent token candlestick chart"></svg>
+
+              <div class="market-stats">
+                <div><span>24h volume</span><strong id="marketVolume">18.2K</strong></div>
+                <div><span>Last event</span><strong id="marketEvent">Discovery</strong></div>
+                <div><span>Spread</span><strong id="marketSpread">0.08</strong></div>
+              </div>
+
+              <div class="order-book" aria-label="order book">
+                <div class="book-heading">
+                  <span>Price</span>
+                  <span>Tokens</span>
+                  <span>Total</span>
+                </div>
+                <div class="book-rows asks" id="askRows"></div>
+                <div class="book-mid">
+                  <span id="lastTradeLabel">Last trade</span>
+                  <strong id="lastTrade">5.42</strong>
+                </div>
+                <div class="book-rows bids" id="bidRows"></div>
+              </div>
+            </section>
+
+            <section class="market-pane trace-pane" id="paneTrace" aria-label="a2a execution trace">
+              <h2>A2A execution trace</h2>
+              <ol class="trace-list">
+                <li id="pathClient">CLI caller</li>
+                <li id="pathMarket">MOMOAI auth + billing</li>
+                <li id="pathRelay">A2A WebSocket relay</li>
+                <li id="pathProvider">Local OpenClaw :18789</li>
+              </ol>
+              <div class="task-state">
+                <span id="taskSubmitted">submitted</span>
+                <span id="taskWorking">working</span>
+                <span id="taskCompleted">completed</span>
+                <span id="taskCharged">charged</span>
+              </div>
+              <pre id="traceArtifact" class="trace-artifact"></pre>
+            </section>
+
+            <section class="market-pane listing-pane" id="paneListing" aria-label="agent and market listing cards">
+              <div class="listing-grid">
+                <article class="listing-card">
+                  <p class="eyebrow">Agent Card</p>
+                  <h2>OpenClaw A2A Service</h2>
+                  <dl>
+                    <div><dt>Protocol</dt><dd>A2A 1.0.0</dd></div>
+                    <div><dt>Transport</dt><dd>JSON-RPC</dd></div>
+                    <div><dt>Inputs</dt><dd>text/plain, application/json</dd></div>
+                    <div><dt>Skill</dt><dd>gomoku_move</dd></div>
+                  </dl>
+                </article>
+                <article class="listing-card market-card">
+                  <p class="eyebrow">Market Card</p>
+                  <h2>Result pricing contract</h2>
+                  <dl>
+                    <div><dt>Capability</dt><dd>Gomoku move</dd></div>
+                    <div><dt>Fixed price</dt><dd>1000 result tokens</dd></div>
+                    <div><dt>Charged when</dt><dd>task_completed</dd></div>
+                    <div><dt>Output</dt><dd>artifact.application/json</dd></div>
+                  </dl>
+                </article>
+              </div>
+            </section>
+
+            <section class="market-pane live-pane" id="paneLive" aria-label="live provider status">
+              <h2>Remote service live</h2>
+              <div class="live-map">
+                <span>Marketplace</span>
+                <strong>wss://momoai.pro/a2a/provider/relay</strong>
+                <span>Provider node</span>
+                <strong>node_demo_openclaw_18789</strong>
+                <span>Local runtime</span>
+                <strong>OpenClaw Gateway :18789</strong>
+              </div>
+              <div class="live-status">
+                <span>online</span>
+                <span>authenticated</span>
+                <span>billing ready</span>
+              </div>
+            </section>
+          </section>
+        </aside>
+      </section>
+    </main>
+    <script src="./app.js?v=live-market"></script>
+  </body>
+</html>

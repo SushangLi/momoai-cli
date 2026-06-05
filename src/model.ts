@@ -64,7 +64,7 @@ export function mergedModels(defaultModels: string[], balances: BalanceModel[]):
       source: existing ? 'default+balance' : 'balance',
       balance: balance.balance,
       onsale: balance.onsale,
-      hint: existing ? '' : ''
+      hint: ''
     });
   }
 

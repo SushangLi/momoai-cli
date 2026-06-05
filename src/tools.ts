@@ -7,6 +7,34 @@ import type { AgentCapability, ResolvedAgentConfig } from './config.js';
 
 export type ConfirmTool = (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
 
+const capabilitiesSchema = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      description: { type: 'string' },
+      fixedTokens: { type: 'number' },
+      enabled: { type: 'boolean' },
+      inputModes: { type: 'array', items: { type: 'string' } },
+      outputModes: { type: 'array', items: { type: 'string' } },
+      skill: {
+        type: 'object',
+        description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string' },
+          instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
+        },
+        required: ['id', 'instructions']
+      }
+    },
+    required: ['id', 'name', 'fixedTokens', 'skill']
+  }
+} as const;
+
 export const momoTools = [
   {
     type: 'function',
@@ -158,33 +186,7 @@ export const momoTools = [
           service_type: { type: 'string', enum: ['websocket', 'funnel'], description: 'websocket is the default outbound relay; funnel registers a public or tunneled provider_url.' },
           provider_runtime: { type: 'string', enum: ['cli', 'external'], description: 'cli means this CLI runs the A2A service; external means platform calls the given A2A provider_url directly through funnel.' },
           provider_url: { type: 'string', description: 'Public or tunneled URL ending in the provider A2A path for funnel service_type.' },
-          capabilities: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' },
-                inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } },
-                skill: {
-                  type: 'object',
-                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    description: { type: 'string' },
-                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
-                  },
-                  required: ['id', 'instructions']
-                }
-              },
-              required: ['id', 'name', 'fixedTokens', 'skill']
-            }
-          }
+          capabilities: capabilitiesSchema
         },
         required: ['name']
       }
@@ -209,33 +211,7 @@ export const momoTools = [
           service_type: { type: 'string', enum: ['websocket', 'funnel'] },
           provider_runtime: { type: 'string', enum: ['cli', 'external'] },
           provider_url: { type: 'string' },
-          capabilities: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' },
-                inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } },
-                skill: {
-                  type: 'object',
-                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    description: { type: 'string' },
-                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
-                  },
-                  required: ['id', 'instructions']
-                }
-              },
-              required: ['id', 'name', 'fixedTokens', 'skill']
-            }
-          }
+          capabilities: capabilitiesSchema
         }
       }
     }
@@ -328,33 +304,7 @@ export const momoTools = [
           require_platform_auth: { type: 'boolean', default: true },
           forward_authorization: { type: 'boolean', default: false },
           restart: { type: 'boolean', default: false },
-          capabilities: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' },
-                inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } },
-                skill: {
-                  type: 'object',
-                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    description: { type: 'string' },
-                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
-                  },
-                  required: ['id', 'instructions']
-                }
-              },
-              required: ['id', 'name', 'fixedTokens', 'skill']
-            }
-          }
+          capabilities: capabilitiesSchema
         }
       }
     }
@@ -410,33 +360,7 @@ export const momoTools = [
           require_platform_auth: { type: 'boolean', default: true },
           forward_authorization: { type: 'boolean', default: false },
           restart: { type: 'boolean', default: false },
-          capabilities: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                name: { type: 'string' },
-                description: { type: 'string' },
-                fixedTokens: { type: 'number' },
-                enabled: { type: 'boolean' },
-                inputModes: { type: 'array', items: { type: 'string' } },
-                outputModes: { type: 'array', items: { type: 'string' } },
-                skill: {
-                  type: 'object',
-                  description: 'Local runtime skill bound to this external capability. Required for priced A2A services.',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    description: { type: 'string' },
-                    instructions: { type: 'string', description: 'What to do and how to do it when this capability_id is invoked.' }
-                  },
-                  required: ['id', 'instructions']
-                }
-              },
-              required: ['id', 'name', 'fixedTokens', 'skill']
-            }
-          }
+          capabilities: capabilitiesSchema
         }
       }
     }
