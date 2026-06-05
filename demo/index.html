@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MOMOAI CLI Hackathon Demo</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=live-market" />
   </head>
   <body>
     <main class="demo-app" aria-label="MOMOAI CLI feature demo">
@@ -17,6 +17,9 @@
           </div>
         </div>
         <div class="topbar-metrics" aria-label="demo summary">
+          <button class="flow-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" tabindex="-1">
+            Demo flow
+          </button>
           <span><strong id="metricTokens">3,840</strong> tokens</span>
           <span><strong id="metricLatency">2.8s</strong> relay</span>
           <span><strong id="metricStatus">online</strong></span>
@@ -24,12 +27,28 @@
       </header>
 
       <section class="stage" aria-label="interactive demo">
-        <nav class="scenario-rail" aria-label="demo steps">
+        <button class="flow-trigger flow-float" id="flowButton" type="button" aria-haspopup="dialog" aria-expanded="false">
+          Demo flow
+        </button>
+        <div class="flow-backdrop" id="flowBackdrop" hidden></div>
+        <aside class="flow-coach" id="flowCoach" aria-live="polite">
+          <span id="flowCoachStep">Step 1 / 5</span>
+          <strong id="flowCoachTitle">Discover by capability</strong>
+          <p id="flowCoachCopy">Search real Agent Card capabilities, not just names or tags.</p>
+        </aside>
+        <nav class="scenario-rail" id="flowModal" aria-label="demo steps" aria-modal="true" role="dialog">
           <div class="rail-title">
-            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 5h16M4 12h16M4 19h16"></path>
-            </svg>
-            <span>Demo flow</span>
+            <div class="rail-title-copy">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 5h16M4 12h16M4 19h16"></path>
+              </svg>
+              <span>Demo flow</span>
+            </div>
+            <button class="icon-button modal-close" id="flowCloseButton" type="button" aria-label="Close demo flow">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6 6 18M6 6l12 12"></path>
+              </svg>
+            </button>
           </div>
           <div id="stepList" class="step-list"></div>
         </nav>
@@ -120,7 +139,7 @@
                 </div>
               </div>
 
-              <svg class="kline-chart" id="klineChart" viewBox="0 0 320 132" role="img" aria-label="agent token candlestick chart"></svg>
+              <svg class="kline-chart" id="klineChart" viewBox="0 0 360 180" role="img" aria-label="agent token candlestick chart"></svg>
 
               <div class="market-stats">
                 <div><span>24h volume</span><strong id="marketVolume">18.2K</strong></div>
@@ -205,6 +224,6 @@
         </aside>
       </section>
     </main>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=live-market"></script>
   </body>
 </html>

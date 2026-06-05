@@ -34,7 +34,7 @@ body {
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  overflow: hidden;
+  overflow: auto;
 }
 
 button {
@@ -43,15 +43,15 @@ button {
 
 .demo-app {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 12px;
-  height: 100vh;
-  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  min-height: 100vh;
+  overflow: visible;
   padding: 16px;
 }
 
 .topbar {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
@@ -110,6 +110,35 @@ h2 {
   gap: 8px;
 }
 
+.flow-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-height: 31px;
+  padding: 5px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.flow-trigger:hover,
+.flow-trigger:focus-visible {
+  border-color: var(--blue);
+  outline: none;
+}
+
+.flow-float {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 18;
+  box-shadow: 0 10px 24px rgba(34, 40, 28, 0.16);
+}
+
 .topbar-metrics span {
   display: inline-flex;
   align-items: center;
@@ -130,12 +159,13 @@ h2 {
 
 .stage {
   display: grid;
-  grid-template-columns: 218px minmax(480px, 1fr) 360px;
+  grid-template-columns: minmax(520px, 1fr) minmax(520px, 1fr);
+  grid-template-rows: minmax(680px, calc(100vh - 32px));
   gap: 12px;
   width: 100%;
   max-width: 1680px;
   min-height: 0;
-  height: 100%;
+  height: auto;
   margin: 0 auto;
 }
 
@@ -149,22 +179,100 @@ h2 {
 .scenario-rail {
   display: flex;
   flex-direction: column;
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  z-index: 30;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 116px);
+  transform: translate(-50%, -10px);
+  opacity: 0;
+  pointer-events: none;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
   box-shadow: var(--shadow);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.scenario-rail.is-open {
+  transform: translate(-50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.flow-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(15, 16, 18, 0.22);
+  backdrop-filter: blur(2px);
+}
+
+.flow-coach {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 15;
+  width: min(360px, calc(100vw - 32px));
+  transform: translate(-50%, -8px);
+  opacity: 0;
+  pointer-events: none;
+  padding: 11px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 40px rgba(34, 40, 28, 0.18);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.flow-coach.is-visible {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
+.flow-coach span,
+.flow-coach strong,
+.flow-coach p {
+  display: block;
+}
+
+.flow-coach span {
+  margin-bottom: 4px;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.flow-coach strong {
+  font-size: 15px;
+}
+
+.flow-coach p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .rail-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 10px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.rail-title-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .icon {
@@ -180,6 +288,8 @@ h2 {
 .step-list {
   display: grid;
   gap: 7px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .step-button {
@@ -247,8 +357,11 @@ h2 {
 
 .terminal-zone {
   display: grid;
+  grid-column: 2;
+  grid-row: 1;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 10px;
+  width: 100%;
 }
 
 .terminal-window {
@@ -427,6 +540,12 @@ h2 {
   color: #ffffff;
 }
 
+.modal-close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
+
 .timeline {
   position: relative;
   height: 8px;
@@ -452,6 +571,8 @@ h2 {
 
 .inspector {
   display: grid;
+  grid-column: 1;
+  grid-row: 1;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   overflow: hidden;
@@ -606,9 +727,9 @@ h2 {
 }
 
 #paneMarket {
-  grid-template-rows: auto 132px auto minmax(0, 1fr);
-  gap: 9px;
-  padding: 11px;
+  grid-template-rows: auto minmax(220px, 1fr) auto minmax(210px, 0.72fr);
+  gap: 12px;
+  padding: 14px;
 }
 
 .ticker-row {
@@ -644,6 +765,7 @@ h2 {
   font-family: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 20px;
   line-height: 1;
+  transition: color 160ms ease;
 }
 
 .ticker-price span {
@@ -659,7 +781,8 @@ h2 {
 
 .kline-chart {
   width: 100%;
-  height: 132px;
+  height: 100%;
+  min-height: 220px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfa;
@@ -670,8 +793,35 @@ h2 {
   stroke-width: 1;
 }
 
+.chart-axis {
+  stroke: #cfd8ca;
+  stroke-width: 1;
+}
+
+.chart-label,
+.chart-time-label,
+.chart-volume-label {
+  fill: #687076;
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 7px;
+}
+
+.chart-label {
+  text-anchor: end;
+}
+
+.chart-time-label {
+  text-anchor: middle;
+}
+
+.chart-volume-label {
+  text-anchor: start;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .chart-wick {
-  stroke-width: 1.4;
+  stroke-width: 1.7;
 }
 
 .chart-candle {
@@ -697,6 +847,24 @@ h2 {
   fill: none;
   stroke: var(--blue);
   stroke-width: 2.2;
+  filter: drop-shadow(0 0 4px rgba(36, 94, 184, 0.22));
+}
+
+.chart-last-line {
+  stroke: rgba(36, 94, 184, 0.55);
+  stroke-dasharray: 4 3;
+  stroke-width: 1;
+}
+
+.chart-last-price {
+  fill: var(--blue);
+  font-family: "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.chart-volume {
+  opacity: 0.28;
 }
 
 .market-stats {
@@ -733,7 +901,7 @@ h2 {
 
 .order-book {
   display: grid;
-  grid-template-rows: 23px 51px 25px 51px;
+  grid-template-rows: 24px minmax(84px, 1fr) 28px minmax(84px, 1fr);
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -769,7 +937,7 @@ h2 {
 
 .book-rows {
   display: grid;
-  grid-template-rows: repeat(3, 17px);
+  grid-template-rows: repeat(6, minmax(14px, 1fr));
   min-height: 0;
   overflow: hidden;
 }
@@ -782,15 +950,18 @@ h2 {
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease;
 }
 
 .book-row::before {
   position: absolute;
-  inset: 2px 5px;
+  inset: 2px 5px 2px auto;
   z-index: 0;
+  width: var(--depth, 24%);
   border-radius: 4px;
   content: "";
-  opacity: 0.08;
+  opacity: 0.12;
+  transition: width 220ms ease, opacity 140ms ease;
 }
 
 .book-row > span {
@@ -820,7 +991,7 @@ h2 {
 }
 
 .book-row.filled::before {
-  opacity: 0.22;
+  opacity: 0.28;
   outline: 1px solid rgba(36, 122, 67, 0.35);
 }
 
@@ -1050,7 +1221,7 @@ h2 {
   text-transform: uppercase;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {
   body {
     overflow: auto;
   }
@@ -1061,15 +1232,38 @@ h2 {
   }
 
   .stage {
-    grid-template-columns: 210px minmax(0, 1fr);
-    grid-template-rows: minmax(620px, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(620px, 1fr);
     height: auto;
   }
 
+  .terminal-zone {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
   .inspector {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-column: 1;
+    grid-row: 1;
+    grid-template-columns: 1fr;
     grid-template-rows: auto;
+  }
+}
+
+@media (max-width: 1180px) {
+  .stage {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(620px, auto) minmax(620px, auto);
+  }
+
+  .terminal-zone {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .inspector {
+    grid-column: 1;
+    grid-row: 1;
   }
 }
 
@@ -1088,12 +1282,13 @@ h2 {
     min-height: 0;
   }
 
-  .scenario-rail {
-    box-shadow: none;
+  .terminal-zone {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .step-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .terminal-window {
@@ -1109,6 +1304,8 @@ h2 {
   }
 
   .inspector {
+    grid-column: 1;
+    grid-row: 1;
     grid-template-columns: 1fr;
   }
 }

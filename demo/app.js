@@ -172,6 +172,9 @@ const baseMarkets = {
       { open: 5.36, high: 5.48, low: 5.29, close: 5.42 }
     ],
     asks: [
+      { id: "ask-6", price: 5.82, tokens: 5100 },
+      { id: "ask-5", price: 5.74, tokens: 3700 },
+      { id: "ask-4", price: 5.68, tokens: 3200 },
       { id: "ask-3", price: 5.63, tokens: 2900 },
       { id: "ask-2", price: 5.51, tokens: 2400 },
       { id: "ask-1", price: 5.45, tokens: 1400 }
@@ -179,7 +182,10 @@ const baseMarkets = {
     bids: [
       { id: "bid-1", price: 5.40, tokens: 1600 },
       { id: "bid-2", price: 5.33, tokens: 2200 },
-      { id: "bid-3", price: 5.26, tokens: 3100 }
+      { id: "bid-3", price: 5.26, tokens: 3100 },
+      { id: "bid-4", price: 5.18, tokens: 4200 },
+      { id: "bid-5", price: 5.10, tokens: 3900 },
+      { id: "bid-6", price: 5.02, tokens: 5400 }
     ]
   },
   research: {
@@ -284,8 +290,18 @@ let sceneIndex = 0;
 let selectedSymbol = "gomoku";
 let renderToken = 0;
 let isPlaying = false;
+let liveMarkets = null;
+let liveTick = 0;
 
 const stepList = document.getElementById("stepList");
+const flowButton = document.getElementById("flowButton");
+const flowCloseButton = document.getElementById("flowCloseButton");
+const flowModal = document.getElementById("flowModal");
+const flowBackdrop = document.getElementById("flowBackdrop");
+const flowCoach = document.getElementById("flowCoach");
+const flowCoachStep = document.getElementById("flowCoachStep");
+const flowCoachTitle = document.getElementById("flowCoachTitle");
+const flowCoachCopy = document.getElementById("flowCoachCopy");
 const terminalOutput = document.getElementById("terminalOutput");
 const sceneBadge = document.getElementById("sceneBadge");
 const playButton = document.getElementById("playButton");
@@ -341,6 +357,7 @@ function buildSteps() {
     button.addEventListener("click", () => {
       isPlaying = false;
       setScene(index, true);
+      closeFlow();
     });
     stepList.appendChild(button);
   });
@@ -381,8 +398,8 @@ function updatePane(scene) {
 }
 
 function priceToY(value, min, max) {
-  const top = 12;
-  const height = 104;
+  const top = 14;
+  const height = 118;
   return top + (1 - (value - min) / Math.max(0.01, max - min)) * height;
 }
 
@@ -395,6 +412,7 @@ function cloneMarkets() {
       asks: market.asks.map((row) => ({ ...row })),
       bids: market.bids.map((row) => ({ ...row })),
       activeAsk: "",
+      activeBid: "",
       lastEvent: "Discovery"
     }
   ]));
@@ -410,7 +428,8 @@ function appendTrade(market, event) {
     open: previous,
     high: Math.max(previous, price) + impulse,
     low: Math.min(previous, price) - 0.04,
-    close: price
+    close: price,
+    volume: Number(event.volume || 0)
   });
   market.candles = market.candles.slice(-10);
   if (event.fillAsk) {
@@ -434,6 +453,54 @@ function buildMarketState(sceneId) {
   return markets;
 }
 
+function refreshBookAroundPrice(market, direction) {
+  const askOffsets = [0.42, 0.33, 0.24, 0.16, 0.09, 0.04];
+  const bidOffsets = [0.03, 0.10, 0.17, 0.25, 0.34, 0.43];
+  const tokenWave = (offset, index) => Math.round(900 + Math.abs(Math.sin(liveTick * 0.7 + index + offset)) * 3900);
+
+  market.asks = askOffsets.map((offset, index) => ({
+    id: `ask-${6 - index}`,
+    price: Number((market.price + offset).toFixed(2)),
+    tokens: tokenWave(offset, index)
+  }));
+
+  market.bids = bidOffsets.map((offset, index) => ({
+    id: `bid-${index + 1}`,
+    price: Number(Math.max(0.01, market.price - offset).toFixed(2)),
+    tokens: tokenWave(offset, index + 6)
+  }));
+
+  market.activeAsk = direction < 0 ? "ask-1" : "";
+  market.activeBid = direction >= 0 ? "bid-1" : "";
+}
+
+function applyLiveMarketTick() {
+  if (!liveMarkets) return;
+  liveTick += 1;
+
+  Object.entries(liveMarkets).forEach(([symbol, market], index) => {
+    const previous = market.price;
+    const pulse = Math.sin(liveTick * 0.82 + index * 1.7) * 0.018;
+    const impulse = liveTick % 7 === index % 7 ? 0.035 : 0;
+    const drift = symbol === selectedSymbol ? 0.006 : 0.002;
+    const next = Number(Math.max(0.5, previous + pulse + impulse - drift).toFixed(2));
+    const volume = Math.round(120 + Math.abs(Math.cos(liveTick + index)) * 620);
+    const last = market.candles[market.candles.length - 1];
+
+    market.price = next;
+    market.volume += volume;
+    last.close = next;
+    last.high = Math.max(last.high, next + 0.02);
+    last.low = Math.min(last.low, next - 0.02);
+    last.volume = (last.volume || 0) + volume;
+
+    refreshBookAroundPrice(market, next - previous);
+    market.lastEvent = next >= previous ? "Live bid lifted" : "Live ask refreshed";
+  });
+
+  updateMarket(scenes[sceneIndex], true);
+}
+
 function formatPrice(value) {
   return Number(value).toFixed(2);
 }
@@ -454,17 +521,31 @@ function spread(market) {
 
 function renderKline(market) {
   const candles = market.candles;
+  const volumes = candles.map((item, index) => item.volume || 800 + index * 170 + (index % 3) * 260);
   const lows = candles.map((item) => item.low);
   const highs = candles.map((item) => item.high);
   const min = Math.min(...lows) - 0.04;
   const max = Math.max(...highs) + 0.04;
-  const step = 28;
-  const startX = 26;
-  const bodyWidth = 10;
+  const plotLeft = 24;
+  const plotRight = 330;
+  const plotTop = 14;
+  const plotBottom = 132;
+  const volumeTop = 146;
+  const volumeBottom = 168;
+  const step = (plotRight - plotLeft) / Math.max(1, candles.length - 1);
+  const bodyWidth = Math.max(7, Math.min(13, step * 0.38));
+  const maxVolume = Math.max(...volumes, 1);
 
-  const grid = [34, 66, 98].map((y) => `<line class="chart-grid" x1="10" y1="${y}" x2="310" y2="${y}" />`).join("");
+  const priceTicks = [max, (max + min) / 2, min];
+  const grid = priceTicks.map((value) => {
+    const y = priceToY(value, min, max);
+    return `
+      <line class="chart-grid" x1="${plotLeft}" y1="${y.toFixed(1)}" x2="${plotRight}" y2="${y.toFixed(1)}" />
+      <text class="chart-label" x="354" y="${(y + 2.5).toFixed(1)}">${formatPrice(value)}</text>
+    `;
+  }).join("");
   const candleMarkup = candles.map((item, index) => {
-    const x = startX + index * step;
+    const x = plotLeft + index * step;
     const high = priceToY(item.high, min, max);
     const low = priceToY(item.low, min, max);
     const open = priceToY(item.open, min, max);
@@ -481,18 +562,43 @@ function renderKline(market) {
   }).join("");
 
   const closes = candles.map((item, index) => {
-    const x = startX + index * step;
+    const x = plotLeft + index * step;
     const y = priceToY(item.close, min, max);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
 
-  klineChart.innerHTML = `${grid}${candleMarkup}<polyline class="chart-line" points="${closes}" />`;
+  const volumeBars = candles.map((item, index) => {
+    const x = plotLeft + index * step;
+    const barHeight = (volumes[index] / maxVolume) * (volumeBottom - volumeTop);
+    const up = item.close >= item.open;
+    return `<rect class="chart-volume ${up ? "chart-up" : "chart-down"}" x="${(x - bodyWidth / 2).toFixed(1)}" y="${(volumeBottom - barHeight).toFixed(1)}" width="${bodyWidth}" height="${Math.max(1, barHeight).toFixed(1)}" />`;
+  }).join("");
+  const lastPrice = candles[candles.length - 1].close;
+  const lastY = priceToY(lastPrice, min, max);
+  const timeLabels = ["09:30", "11:00", "13:30"].map((label, index) => {
+    const x = plotLeft + (plotRight - plotLeft) * (index / 2);
+    return `<text class="chart-time-label" x="${x.toFixed(1)}" y="178">${label}</text>`;
+  }).join("");
+
+  klineChart.innerHTML = `
+    <line class="chart-axis" x1="${plotLeft}" y1="${plotTop}" x2="${plotLeft}" y2="${plotBottom}" />
+    <line class="chart-axis" x1="${plotLeft}" y1="${plotBottom}" x2="${plotRight}" y2="${plotBottom}" />
+    ${grid}
+    ${volumeBars}
+    <text class="chart-volume-label" x="${plotLeft}" y="143">VOL</text>
+    ${candleMarkup}
+    <polyline class="chart-line" points="${closes}" />
+    <line class="chart-last-line" x1="${plotLeft}" y1="${lastY.toFixed(1)}" x2="${plotRight}" y2="${lastY.toFixed(1)}" />
+    <text class="chart-last-price" x="334" y="${(lastY + 2.5).toFixed(1)}">${formatPrice(lastPrice)}</text>
+    ${timeLabels}
+  `;
 }
 
 function renderBookRows(container, rows, activeId) {
-  const visibleRows = rows.slice(0, 3);
+  const visibleRows = rows.slice(0, 6);
+  const maxTokens = Math.max(...rows.map((row) => row.tokens), 1);
   container.innerHTML = visibleRows.map((row) => `
-    <div class="book-row ${row.id === activeId ? "filled" : ""}">
+    <div class="book-row ${row.id === activeId ? "filled" : ""}" style="--depth: ${Math.max(8, (row.tokens / maxTokens) * 100).toFixed(1)}%">
       <span>${formatPrice(row.price)}</span>
       <span>${formatToken(row.tokens)}</span>
       <span>${formatPrice((row.price * row.tokens) / 1000)}</span>
@@ -500,8 +606,8 @@ function renderBookRows(container, rows, activeId) {
   `).join("");
 }
 
-function updateMarket(scene) {
-  const markets = buildMarketState(scene.id);
+function updateMarket(scene, isLive = false) {
+  const markets = liveMarkets || buildMarketState(scene.id);
   const market = markets[selectedSymbol];
   renderWatchlist(markets);
   tickerPair.textContent = market.symbol;
@@ -509,13 +615,13 @@ function updateMarket(scene) {
   tickerChange.textContent = percentChange(market);
   tickerChange.classList.toggle("down", percentChange(market).startsWith("-"));
   marketVolume.textContent = `${(market.volume / 1000).toFixed(1)}K`;
-  marketEvent.textContent = scene.marketEvent || market.lastEvent;
+  marketEvent.textContent = isLive ? market.lastEvent : scene.marketEvent || market.lastEvent;
   marketSpread.textContent = spread(market);
   lastTradeLabel.textContent = scene.id === "invoke" ? "Charged result" : "Last trade";
   lastTrade.textContent = scene.id === "invoke" ? "1000 tokens" : formatPrice(market.price);
   renderKline(market);
   renderBookRows(askRows, market.asks, market.activeAsk);
-  renderBookRows(bidRows, market.bids, "");
+  renderBookRows(bidRows, market.bids, market.activeBid || "");
 }
 
 function renderWatchlist(markets) {
@@ -536,6 +642,19 @@ function updateTimeline() {
   const progress = sceneIndex / Math.max(1, scenes.length - 1);
   timelineFill.style.width = `${progress * 100}%`;
   timecode.textContent = `${formatTime(progress * totalSeconds)} / ${formatTime(totalSeconds)}`;
+}
+
+let coachTimer = 0;
+
+function showFlowCoach(scene) {
+  window.clearTimeout(coachTimer);
+  flowCoachStep.textContent = `Step ${sceneIndex + 1} / ${scenes.length}`;
+  flowCoachTitle.textContent = scene.title;
+  flowCoachCopy.textContent = scene.copy;
+  flowCoach.classList.add("is-visible");
+  coachTimer = window.setTimeout(() => {
+    flowCoach.classList.remove("is-visible");
+  }, 2300);
 }
 
 function escapeHtml(value) {
@@ -660,16 +779,26 @@ function setScene(index, animate = false) {
   sceneIndex = Math.max(0, Math.min(index, scenes.length - 1));
   const scene = scenes[sceneIndex];
   const token = ++renderToken;
+  liveMarkets = buildMarketState(scene.id);
   updateSteps();
   updateInspector(scene);
   updateMarket(scene);
   updatePane(scene);
   traceArtifactOutput.textContent = JSON.stringify(traceArtifact, null, 2);
   updateTimeline();
+  if (animate) showFlowCoach(scene);
   renderTerminal(scene, animate, token);
 }
 
 function attachEvents() {
+  flowButton.addEventListener("click", openFlow);
+  flowCloseButton.addEventListener("click", closeFlow);
+  flowBackdrop.addEventListener("click", closeFlow);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeFlow();
+  });
+
   playButton.addEventListener("click", () => {
     isPlaying = true;
     setScene(sceneIndex, true);
@@ -692,6 +821,20 @@ function attachEvents() {
 
 }
 
+function openFlow() {
+  flowModal.classList.add("is-open");
+  flowBackdrop.hidden = false;
+  flowButton.setAttribute("aria-expanded", "true");
+  flowCloseButton.focus();
+}
+
+function closeFlow() {
+  flowModal.classList.remove("is-open");
+  flowBackdrop.hidden = true;
+  flowButton.setAttribute("aria-expanded", "false");
+}
+
 buildSteps();
 attachEvents();
 setScene(0, false);
+window.setInterval(applyLiveMarketTick, 1250);
