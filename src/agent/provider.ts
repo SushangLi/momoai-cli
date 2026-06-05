@@ -51,7 +51,7 @@ function funnelEndpoint(agent: ResolvedAgentConfig, allowLocalFallback: boolean)
   throw new Error('Funnel remote service requires --provider-url <https://.../a2a> so momoai.pro can reach this provider.');
 }
 
-function websocketEndpoint(value?: string) {
+export function normalizeWebSocketRelayUrl(value?: string) {
   if (!value) throw new Error('Platform did not return a WebSocket relay URL.');
   const url = new URL(value);
   if (url.protocol === 'http:') url.protocol = 'ws:';
@@ -94,20 +94,24 @@ function jsonRpcError(id: JsonRpcRequest['id'], code: number, message: string): 
   };
 }
 
-async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: boolean): Promise<ProviderRegistration> {
+export function buildProviderRegistrationPayload(agent: ResolvedAgentConfig, allowLocalFallback = false) {
   const agentId = agent.agentId;
   if (!agentId) throw new Error('Remote service provider requires an agent id.');
   const card = buildAgentCard({ mode: 'remote_service', agentId, agent });
   const capabilities = marketCapabilities(agent);
+  return {
+    agent_id: agentId,
+    service_type: agent.serviceType,
+    ...(agent.serviceType === 'funnel' ? { provider_url: funnelEndpoint(agent, allowLocalFallback) } : {}),
+    card,
+    capabilities,
+    market_capabilities: capabilities
+  };
+}
+
+async function registerProvider(agent: ResolvedAgentConfig, allowLocalFallback: boolean): Promise<ProviderRegistration> {
   const response = await new MomoClient().request<{ data?: ProviderRegistration } & ProviderRegistration>('/api/a2a/provider/register', {
-    body: {
-      agent_id: agentId,
-      service_type: agent.serviceType,
-      ...(agent.serviceType === 'funnel' ? { provider_url: funnelEndpoint(agent, allowLocalFallback) } : {}),
-      card,
-      capabilities,
-      market_capabilities: capabilities
-    }
+    body: buildProviderRegistrationPayload(agent, allowLocalFallback)
   });
 
   return (response as any).data || response;
@@ -196,7 +200,7 @@ function rawMessageToString(raw: WebSocket.RawData) {
 }
 
 async function runWebSocketSession(registration: ProviderRegistration, agent: ResolvedAgentConfig) {
-  const relayUrl = websocketEndpoint(registration.relay_url);
+  const relayUrl = normalizeWebSocketRelayUrl(registration.relay_url);
 
   await new Promise<void>((resolve) => {
     let settled = false;

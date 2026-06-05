@@ -15,14 +15,18 @@ npm run smoke
 ```
 
 `npm test` compiles the TypeScript project and runs Node test files under
-`tests/`. `npm run smoke` verifies the no-key CLI paths that reviewers can run
-without a MOMOAI account.
+`tests/`. Keep CI tests deterministic: they should validate request construction,
+protocol routing, auth validation, and publishing guards without spending live
+credits or depending on remote provider uptime. `npm run smoke` verifies the CLI
+surfaces that can be checked locally.
 
 ## Demo Changes
 
 The demo must remain a real CLI workflow. Prefer adding steps to
 `demo/run-momoai-flow.mjs` over static screenshots or scripted fake data.
 Purchasing or selling tokens must require explicit user confirmation.
+Registration is part of the demo path; do not replace `$register` with a
+hard-coded key.
 
 ## Public Repo Boundary
 

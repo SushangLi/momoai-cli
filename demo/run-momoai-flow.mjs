@@ -18,6 +18,20 @@ const args = new Set(process.argv.slice(2));
 const yes = args.has('--yes') || args.has('-y');
 const skipRegister = args.has('--skip-register');
 const skipBuy = args.has('--skip-buy');
+const buyAgentId = argValue('--buy-agent-id') || argValue('--agent-id');
+const buyTokens = argValue('--buy-tokens') || '1000';
+const maxPrice = argValue('--max-price');
+const capabilityId = argValue('--capability');
+const callMessage = argValue('--message') || 'Return a short demo result.';
+
+function argValue(name) {
+  const rawArgs = process.argv.slice(2);
+  const index = rawArgs.indexOf(name);
+  if (index >= 0) return rawArgs[index + 1];
+  const prefix = `${name}=`;
+  const inline = rawArgs.find((arg) => arg.startsWith(prefix));
+  return inline ? inline.slice(prefix.length) : undefined;
+}
 
 function npmCommand() {
   return process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -72,7 +86,8 @@ async function askYesNo(rl, question, fallback = true) {
 async function main() {
   console.log('MOMOAI CLI real-flow demo');
   console.log('This script launches the real CLI, runs live commands, and leaves you in the prompt.');
-  console.log('Purchases are skipped unless you explicitly confirm them.');
+  console.log('Registration, discovery, balance, listings, purchase, and A2A calls use native CLI commands.');
+  console.log('Passing --buy-agent-id and --max-price is explicit authorization for a real token purchase.');
   console.log('');
 
   if (!existsSync(distEntry)) {
@@ -150,32 +165,32 @@ async function main() {
       await sendCli('$exchange balance --json', 60_000);
       await sendCli('$exchange listings --json', 60_000);
     } else {
-      console.log('Skipping live discovery, balance, and listings because no MOMOAI key is configured.');
+      console.log('Marketplace steps require an account key. Run without --skip-register to create one through $register.');
     }
 
     if (hasMomoKey() && !skipBuy) {
       const shouldPrepareBuy = await askYesNo(
         rl,
-        'Do you want to continue to a real token purchase? This spends real credits.',
-        false
+        'Do you want to continue to a real token purchase? Demo accounts use platform gift credits when available.',
+        Boolean(buyAgentId && maxPrice)
       );
       if (shouldPrepareBuy) {
-        const agentId = await ask(rl, 'Agent id to buy: ');
-        const tokens = await ask(rl, 'Token amount [1000]: ', '1000');
-        const maxPrice = await ask(rl, 'Maximum unit price in credits per 1,000 tokens: ');
-        const confirmation = await ask(rl, 'Type BUY to execute the purchase: ');
-        if (agentId && tokens && maxPrice && confirmation === 'BUY') {
-          await sendCli(`$exchange buy ${agentId} --tokens ${tokens} --max-price ${maxPrice}`, 60_000);
+        const agentId = buyAgentId || await ask(rl, 'Agent id to buy: ');
+        const tokens = buyTokens || await ask(rl, 'Token amount [1000]: ', '1000');
+        const unitMaxPrice = maxPrice || await ask(rl, 'Maximum unit price in credits per 1,000 tokens: ');
+        const confirmation = buyAgentId && maxPrice ? 'BUY' : await ask(rl, 'Type BUY to execute the purchase: ');
+        if (agentId && tokens && unitMaxPrice && confirmation === 'BUY') {
+          await sendCli(`$exchange buy ${agentId} --tokens ${tokens} --max-price ${unitMaxPrice}`, 60_000);
           await sendCli('$exchange balance --json', 60_000);
 
-          const capabilityId = await ask(
+          const selectedCapabilityId = capabilityId || await ask(
             rl,
             'Optional A2A capability id to call on the bought agent, or press Enter to skip: '
           );
-          if (capabilityId) {
-            const message = await ask(rl, 'A2A message [Return a short demo result.]: ', 'Return a short demo result.');
+          if (selectedCapabilityId) {
+            const message = capabilityId ? callMessage : await ask(rl, 'A2A message [Return a short demo result.]: ', callMessage);
             await sendCli(
-              `$agent call https://momoai.pro/a2a/agents/${agentId} "${message.replace(/"/g, '\\"')}" --capability ${capabilityId} --json`,
+              `$agent call https://momoai.pro/a2a/agents/${agentId} "${message.replace(/"/g, '\\"')}" --capability ${selectedCapabilityId} --json`,
               120_000
             );
           }

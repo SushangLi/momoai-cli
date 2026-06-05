@@ -1,4 +1,5 @@
 import express from 'express';
+import type { Server } from 'node:http';
 import { buildAgentCard, buildMarketCard } from './card.js';
 import { verifyInvocationAuth } from './auth.js';
 import type { InvocationAuth } from './auth.js';
@@ -209,8 +210,23 @@ export async function startAgentServer(options: {
   port: number;
   mode: AgentMode;
   agent?: ResolvedAgentConfig;
-}) {
+}): Promise<Server> {
   const agent = options.agent || resolveAgentConfig(loadConfig());
+  const app = createAgentApp({ mode: options.mode, agent });
+
+  return await new Promise<Server>((resolve, reject) => {
+    const server = app.listen(options.port, options.host, (error?: Error) => {
+      if (error) reject(error);
+      else resolve(server);
+    });
+  });
+}
+
+export function createAgentApp(options: {
+  mode: AgentMode;
+  agent: ResolvedAgentConfig;
+}) {
+  const agent = options.agent;
   const app = express();
   app.use(express.json({ limit: '2mb' }));
 
@@ -232,7 +248,7 @@ export async function startAgentServer(options: {
     };
 
     try {
-      const auth = await authForMode(expressRequest.headers.authorization, options.mode, agent);
+      const auth = await authForMode(expressRequest.headers.authorization, options.mode, options.agent);
       const result = await handleMessageSend(request, options.mode, agent, auth);
       if (result.error) {
         response.status(restStatusForJsonRpcError(result.error.code)).json(result);
@@ -285,7 +301,7 @@ export async function startAgentServer(options: {
     }
 
     try {
-      const auth = await authForMode(expressRequest.headers.authorization, options.mode, agent);
+      const auth = await authForMode(expressRequest.headers.authorization, options.mode, options.agent);
       if (request.method === 'message/send') {
         response.json(await handleMessageSend(request, options.mode, agent, auth));
         return;
@@ -305,10 +321,5 @@ export async function startAgentServer(options: {
     }
   });
 
-  await new Promise<void>((resolve, reject) => {
-    app.listen(options.port, options.host, (error?: Error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
+  return app;
 }

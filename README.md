@@ -76,6 +76,11 @@ The demo script builds the CLI when needed, starts the real `momoai` interactive
 prompt, runs discovery and marketplace commands, and leaves the reviewer inside
 the CLI. Token purchases are real transactions and require explicit confirmation.
 
+The account/key path is also native CLI behavior. A reviewer does not need a
+pre-existing account: run `$register` or `node dist/index.js register` to create
+a demo account, receive a MOMOAI key, and use the platform gift credits returned
+by the account flow for marketplace validation.
+
 ### Command overview
 
 Inside the interactive CLI, commands start with `$`:
@@ -100,6 +105,10 @@ Main entry points:
 If you already have a MOMOAI key, you can provide it with `MOMOAI_KEY`. Set
 `MOMOAI_API_URL` when using a non-default platform endpoint.
 
+Anonymous marketplace calls are not a supported mode. The CLI registers an
+account, stores the resulting key locally, and then uses that key for discovery,
+balances, token purchases, and A2A invocation.
+
 Text without `$` is sent to the selected model:
 
 ```text
@@ -110,6 +119,17 @@ From a shell, omit `$`:
 
 ```bash
 momoai exchange balance --json
+```
+
+The same marketplace chain can be run directly from a shell:
+
+```bash
+node dist/index.js register
+node dist/index.js explore gomoku --scope capability --output-mode application/json --limit 5 --json
+node dist/index.js exchange balance --json
+node dist/index.js exchange listings --json
+node dist/index.js exchange buy <agent_id> --tokens 1000 --max-price <credits_per_k>
+node dist/index.js agent call https://momoai.pro/a2a/agents/<agent_id> "Return a short demo result." --capability <capability_id> --json
 ```
 
 ## Demo and Verification
@@ -129,15 +149,28 @@ npm run demo
 through:
 
 - `$help`
-- optional `$register` when no MOMOAI key is configured
-- `$explore gomoku --scope capability --output-mode application/json --json` when a key is configured
-- `$exchange balance --json` when a key is configured
-- `$exchange listings --json` when a key is configured
+- `$register` when no MOMOAI key is configured
+- `$explore gomoku --scope capability --output-mode application/json --json`
+- `$exchange balance --json`
+- `$exchange listings --json`
 - optional `$exchange buy ...` after the user types `BUY`
 - optional `$agent call ...` after the user chooses an A2A capability
 
-For no-key review, these commands prove the repository builds and exposes real
-CLI surfaces without requiring marketplace credentials:
+To authorize a purchase through the demo script instead of typing the prompts,
+pass the buy parameters explicitly:
+
+```bash
+npm run demo -- --buy-agent-id <agent_id> --buy-tokens 1000 --max-price <credits_per_k>
+```
+
+To continue into an A2A call after the purchase:
+
+```bash
+npm run demo -- --buy-agent-id <agent_id> --buy-tokens 1000 --max-price <credits_per_k> --capability <capability_id> --message "Return a short demo result."
+```
+
+For local repository verification, these commands prove the project builds and
+exposes the CLI, Agent Card, and Market Card surfaces:
 
 ```bash
 npm test
@@ -149,6 +182,24 @@ npm run smoke
 - `node dist/index.js help`
 - `node dist/index.js agent card --json`
 - `node dist/index.js agent market-card --json`
+
+### Automated Coverage
+
+The test suite is intentionally local and deterministic so CI does not depend on
+live platform state, online providers, or remaining gift-credit balances. It
+currently covers:
+
+- command parsing and shell-compatible flag handling
+- A2A Agent Card and MOMOAI Market Card generation
+- marketplace listing normalization and token-purchase request payloads
+- A2A capability validation and platform `message/send` payloads
+- platform invocation JWT verification and scope enforcement
+- provider relay registration payloads and relay URL normalization
+- local A2A JSON-RPC routing through a provider executor
+- OpenClaw A2A publishing capability validation
+
+The live account, gifted-credit purchase, and remote A2A invocation flow remains
+the responsibility of `npm run demo` or the direct shell commands above.
 
 ## What Makes This Different
 
@@ -181,8 +232,9 @@ The CLI exposes market tools for:
 - selling owned agent tokens
 - calling platform agents
 
-The hackathon demo visualizes this as an agent token trading desk with a watchlist,
-candlestick chart, order book, and execution flow.
+The runnable demo exercises this as a live CLI trading flow: discover a
+capability, inspect balances and listings, buy tokens with explicit approval, and
+optionally call the purchased A2A capability.
 
 ### 3. Capability-level A2A discovery
 
@@ -259,15 +311,16 @@ reviewer through the full story:
 1. Start `momoai`.
 2. Show the real command surface with `$help`.
 3. Register a real MOMOAI account when no key is configured.
-4. Discover Gomoku-capable A2A agents by capability and output mode when a key is available.
+4. Use the generated key to discover Gomoku-capable A2A agents by capability and output mode.
 5. Check authenticated balance and token holdings.
 6. List publisher and resale offers.
-7. Optionally buy agent tokens after an explicit `BUY` confirmation.
-8. Optionally call the selected A2A capability.
+7. Buy agent tokens after explicit confirmation or explicit script parameters.
+8. Call the selected A2A capability.
 9. Hand control back to the user inside the live CLI prompt.
 
 The demo intentionally avoids pre-seeded static data. It exercises the same
-commands a reviewer would run manually.
+commands a reviewer would run manually, either from the shell or through
+`demo/run-momoai-flow.mjs`.
 
 ## Core Commands
 
@@ -408,7 +461,8 @@ src/
 demo/
   run-momoai-flow.mjs
 tests/
-  *.test.mjs      Node test suite for parser and card behavior
+  *.test.mjs      Node test suite for parser, cards, services, auth,
+                  provider relay, A2A server, and OpenClaw validation
 .github/
   workflows/ci.yml
 ```
