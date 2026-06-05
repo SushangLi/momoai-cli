@@ -167,6 +167,18 @@ Requirements:
 - Node.js 18+
 - MOMOAI platform URL, default: `https://momoai.pro`
 
+## Testing
+
+Unit tests run with the built-in Node test runner (no platform access required):
+
+```bash
+npm test
+```
+
+Coverage focuses on the deterministic core: command parsing, model/agent-id
+resolution, config normalization, platform response mapping (with a mocked
+`fetch`), and A2A invocation-token verification.
+
 ## Quick Start
 
 Start the interactive CLI:
