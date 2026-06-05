@@ -52,7 +52,7 @@ export function mergedModels(defaultModels: string[], balances: BalanceModel[]):
       source: 'default',
       balance: '',
       onsale: '',
-      hint: `buy tokens with $exchange buy ${agent} --tokens <n> --max-price <price>`
+      hint: `buy tokens with $exchange buy ${agent} --tokens <n> --max-price <cr_per_k>`
     });
   }
 

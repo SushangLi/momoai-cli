@@ -55,6 +55,9 @@ export async function exploreAgents(query: string, limit = 10, authToken?: strin
     id: agent.id,
     name: agent.name,
     price: `${agent.price}/${agent.price_unit}`,
+    direct_price_per_1k: Number(agent.price_unit || 1000) > 0 ? (Number(agent.price || 0) / Number(agent.price_unit || 1000)) * 1000 : null,
+    direct_available_tokens: agent.available_tokens === null ? 'unlimited' : agent.available_tokens,
+    need_purchase: agent.need_purchase,
     model: agent.model_call_name,
     intro: agent.intro,
     ...(agent.online === undefined ? {} : { online: agent.online }),
@@ -64,12 +67,22 @@ export async function exploreAgents(query: string, limit = 10, authToken?: strin
   }));
 }
 
+function listingSource(listing: any) {
+  const type = String(listing.listing_type || '').toLowerCase();
+  return type === 'initial' || type === 'direct' ? 'direct' : 'resale';
+}
+
 export async function exchangeBalance(authToken?: string) {
   const response = await new MomoClient().request<any>('/api/cli/exchange/balance', { authToken });
   return {
     credits: response.data.credits.total,
     purchase: response.data.credits.purchase,
     gift: response.data.credits.gift,
+    spendable_credits: response.data.credits.spendable_total ?? response.data.credits.total,
+    spendable_purchase: response.data.credits.spendable_purchase ?? response.data.credits.purchase,
+    spendable_gift: response.data.credits.spendable_gift ?? response.data.credits.gift,
+    locked_purchase: response.data.credits.locked_purchase ?? 0,
+    locked_gift: response.data.credits.locked_gift ?? 0,
     tokens: response.data.tokens.map((token: any) => ({
       agent: token.agent_id,
       balance: token.token_balance,
@@ -97,9 +110,12 @@ export async function exchangeListings(agentId?: number, authToken?: string) {
   });
   return response.data.listings.map((listing: any) => ({
     agent: listing.agent_id,
+    source: listingSource(listing),
     seller: listing.seller_username,
-    tokens: listing.token_onsale,
+    tokens: listing.unlimited ? 'unlimited' : listing.token_onsale,
     price: listing.resell_price,
+    price_unit: 'cr/K tokens',
+    available: listing.is_available === false ? false : listing.unlimited ? true : Number(listing.token_onsale || 0) > 0,
     author: listing.model_author
   }));
 }
@@ -113,7 +129,34 @@ export async function exchangeBuy(agentId: number, tokens: number, maxPrice: num
     agent: response.data.agent_id,
     tokens_bought: response.data.tokens_bought,
     tokens_remaining: response.data.tokens_remaining,
+    fillable_tokens: response.data.fillable_tokens,
+    unfilled_tokens: response.data.unfilled_tokens,
     credits_used: response.data.credits_used?.total,
+    max_price_unit: 'cr/K tokens',
+    purchases: response.data.purchases?.map((purchase: any) => ({
+      source: listingSource(purchase),
+      seller: purchase.seller_username,
+      tokens: purchase.amount,
+      price: purchase.price,
+      price_unit: 'cr/K tokens',
+      cost: purchase.cost
+    })),
+    skipped_sources: response.data.skipped_sources?.map((source: any) => ({
+      source: listingSource(source),
+      seller: source.seller_username,
+      price: source.price,
+      price_unit: 'cr/K tokens',
+      available_tokens: source.available_tokens,
+      requested_tokens: source.requested_tokens,
+      reason: source.reason,
+      required_cost: source.required_cost,
+      affordable_tokens: source.affordable_tokens,
+      spendable_purchase: source.spendable_purchase,
+      spendable_gift: source.spendable_gift,
+      gift_allowed: source.gift_allowed
+    })),
+    failure_reason: response.data.failure_reason,
+    credit_availability: response.data.credit_availability,
     status: response.data.status
   };
 }

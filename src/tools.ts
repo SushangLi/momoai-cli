@@ -32,7 +32,7 @@ export const momoTools = [
     type: 'function',
     function: {
       name: 'exchange_balance',
-      description: 'Get account credits and token balances.',
+      description: 'Get account credits, spendable credits, and token balances. For agents that require purchase credits, use spendable_purchase rather than total credits.',
       parameters: { type: 'object', properties: {} }
     }
   },
@@ -48,7 +48,7 @@ export const momoTools = [
     type: 'function',
     function: {
       name: 'exchange_listings',
-      description: 'Get resale token listings, optionally for one agent.',
+      description: 'Get buyable token offers, optionally for one agent. Results always include the publisher direct price when the agent has a public price, plus any resale listings. price is credits per 1,000 tokens (cr/K).',
       parameters: {
         type: 'object',
         properties: {
@@ -61,13 +61,13 @@ export const momoTools = [
     type: 'function',
     function: {
       name: 'exchange_buy',
-      description: 'Buy tokens for an agent from resale listings.',
+      description: 'Buy tokens for an agent from the best eligible source: publisher direct inventory or resale listings. max_price is the maximum unit price in credits per 1,000 tokens (cr/K), not total spend. This is all-or-nothing: it never executes a partial purchase. For a user limit of price < 20 cr/K, pass max_price=20. If status is no_purchases, inspect skipped_sources/fillable_tokens and do not retry unchanged; ask the user or decide a smaller explicit amount if authorized.',
       parameters: {
         type: 'object',
         properties: {
-          agent_id: { type: 'number' },
-          tokens: { type: 'number' },
-          max_price: { type: 'number' }
+          agent_id: { type: 'number', description: 'Target agent id.' },
+          tokens: { type: 'number', description: 'Number of agent tokens to buy.' },
+          max_price: { type: 'number', description: 'Maximum acceptable unit price in credits per 1,000 tokens (cr/K); not the total transaction cost.' }
         },
         required: ['agent_id', 'tokens', 'max_price']
       }
