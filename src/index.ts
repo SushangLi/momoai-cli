@@ -22,7 +22,7 @@ const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'permis
 
 function help() {
   console.log(`Commands:
-	  $register
+	  $register [--show-secrets]
 	  $explore <query> [--limit n] [--scope agent|capability] [--output-mode mime] [--json]
   $exchange balance [--json]
   $exchange owned [--json]
@@ -33,9 +33,9 @@ function help() {
   $permission part|full
   $run <agent_id> [--json]
   $agent profile|publish|update-listing|serve|connect|openclaw|card|market-card|call ...
-  $config show
-  $config reset key
-  $config reset password [new_password] [--old-password old_password]
+  $config show [--show-secrets]
+  $config reset key [--show-secrets]
+  $config reset password [new_password] [--old-password old_password] [--show-secrets]
   $quit
 
 In interactive CLI, text without $ is sent to the current $model.

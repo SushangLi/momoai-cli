@@ -33,3 +33,5 @@ hard-coded key.
 Do not commit local config, secrets, private package names, or business-specific
 executor logic. Keep private provider executors in separate private repositories
 and expose only generic `MOMOAI_PROVIDER_EXECUTOR` wiring in this repo.
+CLI output should mask locally stored passwords and MOMOAI keys by default; use
+explicit reveal flags only for user-controlled copy workflows.

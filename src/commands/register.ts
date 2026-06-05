@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { MomoClient } from '../client.js';
 import { loadConfig, saveConfig } from '../config.js';
+import { maskSecret } from '../format.js';
 import type { ParsedCommand } from '../parser.js';
 
 const suffixChars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -28,8 +29,9 @@ function randomPassword() {
 
 export async function registerCommand(command: ParsedCommand) {
   if (command.args.length > 0) {
-    throw new Error('Usage: $register');
+    throw new Error('Usage: $register [--show-secrets]');
   }
+  const showSecrets = command.flags['show-secrets'] === true || command.flags.show_secrets === true;
 
   const client = new MomoClient();
   const config = loadConfig();
@@ -66,8 +68,11 @@ export async function registerCommand(command: ParsedCommand) {
   console.log('Registration succeeded.');
   console.log(`email: ${registration.email}`);
   console.log(`username: ${registration.username}`);
-  console.log(`password: ${registration.password}`);
-  console.log(`momo_key: ${momoKey}`);
+  console.log(`password: ${showSecrets ? registration.password : maskSecret(registration.password)}`);
+  console.log(`momo_key: ${showSecrets ? momoKey : maskSecret(momoKey)}`);
+  if (!showSecrets) {
+    console.log('secrets: hidden by default; run $config show --show-secrets if you need to copy them.');
+  }
 }
 
 function createRegistration() {

@@ -81,6 +81,11 @@ pre-existing account: run `$register` or `node dist/index.js register` to create
 a demo account, receive a MOMOAI key, and use the platform gift credits returned
 by the account flow for marketplace validation.
 
+Credentials are saved to `~/.momoai-cli/config.json` and masked in command
+output by default. Add `--show-secrets` to `$register`, `$config show`,
+`$config reset key`, or `$config reset password` only when you need to copy the
+generated password or MOMOAI key.
+
 ### Command overview
 
 Inside the interactive CLI, commands start with `$`:
@@ -95,8 +100,8 @@ momoai (momo_237)> $exchange balance
 Main entry points:
 
 - `$help`: show available commands and options.
-- `$register`: register a local MOMOAI account and key.
-- `$config`: show or reset saved local configuration.
+- `$register`: register a local MOMOAI account and key; secrets are masked unless `--show-secrets` is passed.
+- `$config`: show or reset saved local configuration; secrets are masked unless `--show-secrets` is passed.
 - `$model`: show or switch the selected model.
 - `$explore`: discover marketplace agents and capabilities.
 - `$exchange`: check balances/listings and buy or sell agent tokens.
@@ -328,9 +333,10 @@ commands a reviewer would run manually, either from the shell or through
 
 ```text
 $register
-$config show
-$config reset key
-$config reset password [new_password] [--old-password old_password]
+$register --show-secrets
+$config show [--show-secrets]
+$config reset key [--show-secrets]
+$config reset password [new_password] [--old-password old_password] [--show-secrets]
 $model
 $permission part
 $permission full

@@ -24,3 +24,10 @@ export function truncate(value: unknown, max = 72) {
   const text = String(value ?? '');
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
+
+export function maskSecret(value: unknown, visible = 4) {
+  const text = String(value ?? '');
+  if (!text) return '(not set)';
+  if (text.length <= visible * 2) return `${text[0]}...${text[text.length - 1]}`;
+  return `${text.slice(0, visible)}...${text.slice(-visible)}`;
+}

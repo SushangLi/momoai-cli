@@ -1,5 +1,6 @@
 import { getConfigPath, loadConfig, saveConfig } from '../config.js';
 import { MomoClient } from '../client.js';
+import { maskSecret } from '../format.js';
 import { flagString, type ParsedCommand } from '../parser.js';
 import { randomBytes } from 'node:crypto';
 
@@ -9,11 +10,12 @@ function randomPassword() {
 
 export async function configCommand(command: ParsedCommand) {
   const [action, key, ...rest] = command.args;
+  const showSecrets = command.flags['show-secrets'] === true || command.flags.show_secrets === true;
 
   if (action === 'reset') {
     if (key === 'key') {
       if (rest.length > 0) {
-        throw new Error('Usage: $config reset key');
+        throw new Error('Usage: $config reset key [--show-secrets]');
       }
 
       const config = loadConfig();
@@ -42,13 +44,14 @@ export async function configCommand(command: ParsedCommand) {
       });
 
       console.log('MOMO key reset succeeded.');
-      console.log(`momo_key: ${momoKey}`);
+      console.log(`momo_key: ${showSecrets ? momoKey : maskSecret(momoKey)}`);
+      if (!showSecrets) console.log('secrets: hidden by default; rerun with --show-secrets if you need to copy the new key.');
       return;
     }
 
     if (key === 'password') {
       if (rest.length > 1) {
-        throw new Error('Usage: $config reset password [new_password] [--old-password old_password]');
+        throw new Error('Usage: $config reset password [new_password] [--old-password old_password] [--show-secrets]');
       }
 
       const newPassword = rest[0] || randomPassword();
@@ -79,11 +82,12 @@ export async function configCommand(command: ParsedCommand) {
       });
 
       console.log('Password reset succeeded.');
-      console.log(`password: ${newPassword}`);
+      console.log(`password: ${showSecrets ? newPassword : maskSecret(newPassword)}`);
+      if (!showSecrets) console.log('secrets: hidden by default; rerun with --show-secrets if you need to copy the new password.');
       return;
     }
 
-    throw new Error('Usage: $config reset key | $config reset password [new_password] [--old-password old_password]');
+    throw new Error('Usage: $config reset key [--show-secrets] | $config reset password [new_password] [--old-password old_password] [--show-secrets]');
   }
 
   if (!action || action === 'show') {
@@ -107,20 +111,21 @@ export async function configCommand(command: ParsedCommand) {
     console.log(`memory.recentTokenBudget: ${config.memory.recentTokenBudget}`);
     console.log(`account.email: ${config.account?.email || '(not set)'}`);
     console.log(`account.username: ${config.account?.username || '(not set)'}`);
-    console.log(`account.password: ${config.account?.password || '(not set)'}`);
-    console.log(`account.momoKey: ${config.account?.momoKey || '(not set)'}`);
+    console.log(`account.password: ${showSecrets ? config.account?.password || '(not set)' : maskSecret(config.account?.password)}`);
+    console.log(`account.momoKey: ${showSecrets ? config.account?.momoKey || '(not set)' : maskSecret(config.account?.momoKey)}`);
     console.log(`account.createdAt: ${config.account?.createdAt || '(not set)'}`);
     if (config.pendingRegistration) {
       console.log(`pendingRegistration.email: ${config.pendingRegistration.email}`);
       console.log(`pendingRegistration.username: ${config.pendingRegistration.username}`);
-      console.log(`pendingRegistration.password: ${config.pendingRegistration.password}`);
+      console.log(`pendingRegistration.password: ${showSecrets ? config.pendingRegistration.password : maskSecret(config.pendingRegistration.password)}`);
       console.log(`pendingRegistration.createdAt: ${config.pendingRegistration.createdAt}`);
     }
+    if (!showSecrets) console.log('secrets: hidden by default; add --show-secrets to reveal local credentials.');
     console.log(`path: ${getConfigPath()}`);
     return;
   }
 
-  throw new Error('Usage: $config show | $config reset key | $config reset password [new_password] [--old-password old_password]');
+  throw new Error('Usage: $config show [--show-secrets] | $config reset key [--show-secrets] | $config reset password [new_password] [--old-password old_password] [--show-secrets]');
 }
 
 async function loginForAuthToken(email: string, password: string): Promise<string> {

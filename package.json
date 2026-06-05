@@ -1,8 +1,25 @@
 {
   "name": "momoai-cli",
   "version": "0.1.0",
-  "description": "Interactive CLI for MOMO AI minimum workflows",
+  "description": "Marketplace-native agent CLI for MOMOAI trading, A2A invocation, and remote provider publishing",
   "license": "MIT",
+  "author": "MOMOAI CLI contributors",
+  "homepage": "https://www.momoai.pro/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SushangLi/momoai-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SushangLi/momoai-cli/issues"
+  },
+  "keywords": [
+    "momoai",
+    "agent",
+    "a2a",
+    "marketplace",
+    "cli",
+    "openclaw"
+  ],
   "type": "module",
   "bin": {
     "momoai": "./dist/index.js"

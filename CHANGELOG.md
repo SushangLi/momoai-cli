@@ -4,6 +4,8 @@
 
 - Documented the native registration-to-purchase reviewer flow, including direct
   shell commands and parameterized demo-script purchases.
+- Added package publishing metadata and default masking for local passwords and
+  MOMOAI keys, with explicit `--show-secrets` reveal flags.
 - Expanded automated coverage for marketplace service payloads, A2A calls,
   provider relay registration, invocation JWTs, OpenClaw publishing validation,
   and local A2A server routing.
