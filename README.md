@@ -424,6 +424,38 @@ debugging. Normal publishing should use `$agent openclaw publish`.
 
 ## Local vs Remote Service Modes
 
+### External provider executor plugins
+
+CLI-runtime providers can delegate a capability to an ES module without adding
+service-specific code to MOMOAI CLI. Configure the module with
+`--provider-executor`; absolute paths and `file://` URLs are supported. The
+module exports a function, `execute(input)`, or `createExecutor()` compatible
+with `momoai.provider-executor.v1`.
+
+TypeScript plugins can import the public contract from:
+
+```ts
+import type {
+  ProviderExecutorInput,
+  ProviderExecutorOutput
+} from 'momoai-cli/provider-sdk';
+```
+
+Keep provider credentials in environment variables. `providerExecutorOptions`
+is intended for non-secret behavior such as a model name, timeout, or the name
+of an environment variable. A provider executor receives the short-lived
+platform invocation token when it needs to upload a caller-owned result asset.
+
+Example using a locally built plugin:
+
+```bash
+momoai agent profile set imagegen \
+  --provider-runtime cli \
+  --service websocket \
+  --provider-executor file:///absolute/path/to/plugin/dist/index.js \
+  --provider-executor-options '{"model":"gpt-image-2"}'
+```
+
 ### Local mode
 
 Local mode is the default. Users can run the CLI or a local agent without paying a

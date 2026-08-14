@@ -24,13 +24,20 @@
   "bin": {
     "momoai": "./dist/index.js"
   },
+  "exports": {
+    "./provider-sdk": {
+      "types": "./dist/provider-sdk.d.ts",
+      "import": "./dist/provider-sdk.js"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "demo": "node demo/run-momoai-flow.mjs",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "smoke": "npm run build && node dist/index.js help && node dist/index.js agent card --json && node dist/index.js agent market-card --json",
-    "test": "npm run build && node --test tests/*.test.mjs && tsx --test test/*.test.ts"
+    "test": "npm run build && node --test tests/*.test.mjs && tsx --test test/*.test.ts",
+    "test:provider-sdk": "npm run build && node -e \"import('./dist/provider-sdk.js')\""
   },
   "engines": {
     "node": ">=18.0.0"
