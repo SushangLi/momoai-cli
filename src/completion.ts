@@ -6,12 +6,11 @@ type Rule = {
   subcommandFlags?: Record<string, string[]>;
 };
 
-const commands = ['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit'];
+const commands = ['login', 'register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit'];
 
 const rules: Record<string, Rule> = {
-  register: {
-    subcommands: []
-  },
+  login: { flags: ['--username','--email','--password-stdin'] },
+  register: { flags: ['--username','--email','--password-stdin'] },
   explore: {
     flags: ['--limit', '--scope', '--input-mode', '--output-mode', '--max-fixed-tokens', '--online-only', '--json']
   },
@@ -103,7 +102,7 @@ export function completer(line: string): [string[], string] {
   }
   if (command === 'config' && firstArg === 'reset' && args[1] === 'password') {
     if (activeToken.startsWith('--') || activeToken === '') {
-      return completeFrom(['--old-password'], activeToken);
+      return completeFrom([], activeToken);
     }
     return [[], activeToken];
   }

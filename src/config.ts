@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 export type AgentMode = 'local' | 'remote_service';
 export type AgentServiceType = 'websocket' | 'funnel';
@@ -92,19 +92,18 @@ export interface CliConfig {
   account?: {
     email: string;
     username: string;
-    password: string;
+    userId?: string;
     momoKey: string;
     createdAt: string;
   };
   pendingRegistration?: {
     email: string;
     username: string;
-    password: string;
     createdAt: string;
   };
 }
 
-const configPath = join(homedir(), '.momoai-cli', 'config.json');
+const configPath = process.env.MOMOAI_CONFIG_PATH ? resolve(process.env.MOMOAI_CONFIG_PATH) : join(homedir(), '.momoai-cli', 'config.json');
 const defaultCapabilities: AgentCapability[] = [
   {
     id: 'general_task',
@@ -173,13 +172,27 @@ const defaultConfig: CliConfig = {
   }
 };
 
+// Upgrade old files in place without retaining a second plaintext-password copy.
+export function removeStoredPasswords(config: any): boolean {
+  let changed = false;
+  for (const section of ['account', 'pendingRegistration']) {
+    if (config[section] && Object.hasOwn(config[section], 'password')) {
+      delete config[section].password;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function readStoredConfig(): Partial<CliConfig> {
   if (!existsSync(configPath)) return {};
-  try {
-    return JSON.parse(readFileSync(configPath, 'utf8')) as Partial<CliConfig>;
-  } catch {
-    return {};
-  }
+  const raw = readFileSync(configPath, 'utf8');
+  let stored: any;
+  try { stored = JSON.parse(raw); }
+  catch { throw new Error('CLI config is invalid JSON; repair it before continuing.'); }
+  if (removeStoredPasswords(stored)) writeFileSync(configPath, `${JSON.stringify(stored, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(configPath, 0o600);
+  return stored;
 }
 
 type LegacyConfig = Partial<CliConfig> & { momoKey?: string };
@@ -422,7 +435,6 @@ export function loadConfig(): CliConfig {
     ? {
         email: '',
         username: '',
-        password: '',
         momoKey: envMomoKey || legacyMomoKey || '',
         createdAt: ''
       }
@@ -489,8 +501,10 @@ export function saveConfig(next: Partial<CliConfig>): CliConfig {
     ...(merged.memory || {})
   };
 
+  removeStoredPasswords(merged);
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, `${JSON.stringify(merged, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(configPath, 0o600);
   return loadConfig();
 }
 

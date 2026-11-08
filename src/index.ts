@@ -5,6 +5,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { CliError } from './client.js';
 import { parseCommand } from './parser.js';
 import type { ParsedCommand } from './parser.js';
+import { loginCommand } from './commands/login.js';
 import { registerCommand } from './commands/register.js';
 import { exploreCommand } from './commands/explore.js';
 import { exchangeCommand } from './commands/exchange.js';
@@ -18,11 +19,12 @@ import { sendChat } from './chat.js';
 import { loadConfig } from './config.js';
 import type { ConfirmTool } from './tools.js';
 
-const cliCommands = new Set(['register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit']);
+const cliCommands = new Set(['login', 'register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit']);
 
 function help() {
   console.log(`Commands:
-	  $register [--show-secrets]
+	  $register --username <name> --email <email> [--password-stdin]
+  $login --username <name> | --email <email> [--password-stdin]
 	  $explore <query> [--limit n] [--scope agent|capability] [--output-mode mime] [--json]
   $exchange balance [--json]
   $exchange owned [--json]
@@ -35,7 +37,7 @@ function help() {
   $agent profile|publish|update-listing|serve|connect|openclaw|card|market-card|call ...
   $config show [--show-secrets]
   $config reset key [--show-secrets]
-  $config reset password [new_password] [--old-password old_password] [--show-secrets]
+  $config reset password
   $quit
 
 In interactive CLI, text without $ is sent to the current $model.
@@ -44,6 +46,8 @@ Agent plan/tool/observe trace is visible by default. Add --hide-agent-trace to h
 
 async function dispatch(command: ParsedCommand) {
   switch (command.name) {
+    case 'login':
+      return loginCommand(command);
     case 'register':
       return registerCommand(command);
     case 'explore':
@@ -109,6 +113,7 @@ async function main() {
 
   for await (const line of rl) {
     try {
+      rl.pause();
       await runLine(line, confirmTool);
     } catch (error) {
       if (error instanceof CliError && error.status) {
@@ -117,6 +122,7 @@ async function main() {
         console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+    rl.resume();
     rl.setPrompt(`momoai (${loadConfig().model})> `);
     rl.prompt();
   }

@@ -1,3 +1,4 @@
+import { parseUserId } from '../identity.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { loadConfig } from '../config.js';
 
@@ -62,7 +63,8 @@ export async function verifyInvocationAuth(authorizationHeader: string | undefin
     throw new Error('Invocation token target agent does not match this provider');
   }
 
-  const callerUserId = String(payload.sub || '');
+  if(payload.identity_version !== 2)throw new Error('Unsupported invocation identity version');
+  const callerUserId = parseUserId(payload.sub);
   if (!callerUserId) {
     throw new Error('Invocation token is missing caller subject');
   }

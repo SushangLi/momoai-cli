@@ -82,14 +82,11 @@ every marketplace step can also be called from shell commands by an external
 agent or automation script.
 
 The account/key path is also native CLI behavior. A user does not need a
-pre-provisioned key: run `$register` or `node dist/index.js register` to create a
-MOMOAI account, receive a MOMOAI key, and use the platform gift credits returned
-by the account flow for marketplace validation.
+pre-provisioned key: register with an explicit username and email, verify the email, then run `$login` to obtain an account API key. Existing accounts can log in directly.
 
 Credentials are saved to `~/.momoai-cli/config.json` and masked in command
-output by default. Add `--show-secrets` to `$register`, `$config show`,
-`$config reset key`, or `$config reset password` only when you need to copy the
-generated password or MOMOAI key.
+output by default. Add `--show-secrets` to `$config show` or
+`$config reset key` only when you need to copy a MOMOAI key. Passwords are prompted without echo and are never saved. Existing plaintext password fields are removed when the configuration is opened.
 
 ### Command overview
 
@@ -359,11 +356,12 @@ live platform, either from the shell or through `demo/run-momoai-flow.mjs`.
 ### Account and config
 
 ```text
-$register
-$register --show-secrets
+$register --username <name> --email <address> [--password-stdin]
+$login --username <name> [--password-stdin]
+$login --email <address> [--password-stdin]
 $config show [--show-secrets]
 $config reset key [--show-secrets]
-$config reset password [new_password] [--old-password old_password] [--show-secrets]
+$config reset password
 $model
 $permission part
 $permission full
@@ -538,3 +536,9 @@ tests/
 - `node_modules/` and `dist/` are generated locally.
 - `MOMOAI_API_URL` can override the default platform URL.
 - The previous long-form user manual is archived as `README.legacy.md`.
+
+## Identity v2
+
+The CLI and server must upgrade together. Log in with `$login --username <name>` or `$login --email <address>`; an email-shaped username must use `--username`. For automation, pipe the password through standard input and add `--password-stdin`. Never pass passwords in command arguments.
+
+Registration requires `$register --username <name> --email <address>` and a password of at least 12 characters. Complete email verification, then log in. The temporary login session is revoked after obtaining the account API key. Configuration retains the immutable UUID `userId`, public profile fields and API key. Renaming an account does not change its UUID or key ownership.

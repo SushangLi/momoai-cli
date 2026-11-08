@@ -8,6 +8,7 @@ const secret = new TextEncoder().encode('test-secret');
 async function signInvocationToken(claims = {}) {
   return new SignJWT({
     scope: 'agent.invoke',
+    identity_version: 2,
     agent_id: 42,
     capability_id: 'gomoku_move',
     fixed_tokens: 1500,
@@ -17,7 +18,7 @@ async function signInvocationToken(claims = {}) {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuer('https://platform.example.test')
     .setAudience('momoai:agent:42')
-    .setSubject('user_123')
+    .setSubject('01912345-6789-7abc-8def-0123456789ab')
     .setJti('run_123')
     .setIssuedAt()
     .setExpirationTime('5m')
@@ -39,7 +40,7 @@ describe('invocation auth', () => {
     const token = await signInvocationToken();
     const auth = await verifyInvocationAuth(`Bearer ${token}`, 42);
 
-    assert.equal(auth.callerUserId, 'user_123');
+    assert.equal(auth.callerUserId, '01912345-6789-7abc-8def-0123456789ab');
     assert.equal(auth.agentId, 42);
     assert.equal(auth.capabilityId, 'gomoku_move');
     assert.equal(auth.fixedTokens, 1500);
