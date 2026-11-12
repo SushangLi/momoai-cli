@@ -8,7 +8,7 @@ export function parseUserId(value: unknown): string {
   return value;
 }
 
-export type LoginIdentifier = { type: 'username' | 'email'; value: string };
+export type LoginIdentifier = { type: 'auto' | 'username' | 'email'; value: string };
 
 export async function readSecret(prompt: string, fromStdin = false): Promise<string> {
   if (fromStdin) {

@@ -17,15 +17,15 @@ test('old plaintext passwords are removed from disk and the config is private',(
     assert.equal(stored.account.password,undefined);assert.equal(stored.pendingRegistration.password,undefined);assert.equal(stored.account.momoKey,'fixture-key');assert.equal(statSync(file).mode&0o777,0o600);
   } finally {rmSync(directory,{recursive:true,force:true});}
 });
-test('typed login uses an ephemeral session and never returns an old account ID',()=>{
+test('automatic login uses an ephemeral session and never returns an old account ID',()=>{
   const code=`
     import assert from 'node:assert/strict';
     const {passwordSession,closePasswordSession}=await import(${JSON.stringify(identityModule)});
     const calls=[];const token='sid_'+ 'a'.repeat(43);
     globalThis.fetch=async(url,options)=>{calls.push({url:String(url),...options});return new Response(JSON.stringify({success:true,user:{userId:'01912345-6789-7abc-8def-0123456789ab',username:'name@example.com'}}),{headers:{'content-type':'application/json','set-cookie':'momo_session='+token+'; HttpOnly; Secure; SameSite=Lax'}});};
-    const session=await passwordSession({type:'username',value:'name@example.com'},'fixture password');
+    const session=await passwordSession({type:'auto',value:'name@example.com'},'fixture password');
     await closePasswordSession(session.token);
-    assert.deepEqual(JSON.parse(calls[0].body).identifier,{type:'username',value:'name@example.com'});
+    assert.deepEqual(JSON.parse(calls[0].body).identifier,{type:'auto',value:'name@example.com'});
     assert.equal(calls[1].headers.Authorization,'Bearer '+token);
     assert.equal(calls[0].redirect,'error');
     globalThis.fetch=async()=>new Response(JSON.stringify({success:true,user:{userId:'legacy-name'}}),{headers:{'set-cookie':'momo_session='+token+'; HttpOnly'}});

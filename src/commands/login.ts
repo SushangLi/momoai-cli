@@ -3,10 +3,10 @@ import { readSecret,passwordSession,sessionRequest,closePasswordSession } from '
 import { flagString,type ParsedCommand } from '../parser.js';
 
 export async function loginCommand(command:ParsedCommand) {
-  const username=flagString(command.flags,'username'),email=flagString(command.flags,'email');
-  if(command.args.length || !!username===!!email)throw new Error('Usage: $login --username <name> | --email <email> [--password-stdin]');
+  const username=flagString(command.flags,'username'),email=flagString(command.flags,'email'),account=flagString(command.flags,'account');
+  if(command.args.length || [username,email,account].filter(Boolean).length!==1)throw new Error('Usage: $login --account <email-or-username> | --username <name> | --email <email> [--password-stdin]');
   const password=await readSecret('Password: ',command.flags['password-stdin']===true);
-  const session=await passwordSession(username?{type:'username',value:username}:{type:'email',value:email!},password);
+  const session=await passwordSession(account?{type:'auto',value:account}:username?{type:'username',value:username}:{type:'email',value:email!},password);
   try {
     let result=await sessionRequest(session.token,'/api/user/momoai-key');
     if(!result.data?.key)result=await sessionRequest(session.token,'/api/user/momoai-key',{action:'create'});

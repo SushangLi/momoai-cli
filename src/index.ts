@@ -24,7 +24,7 @@ const cliCommands = new Set(['login', 'register', 'explore', 'exchange', 'model'
 function help() {
   console.log(`Commands:
 	  $register --username <name> --email <email> [--password-stdin]
-  $login --username <name> | --email <email> [--password-stdin]
+  $login --account <email-or-username> | --username <name> | --email <email> [--password-stdin]
 	  $explore <query> [--limit n] [--scope agent|capability] [--output-mode mime] [--json]
   $exchange balance [--json]
   $exchange owned [--json]

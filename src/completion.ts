@@ -9,7 +9,7 @@ type Rule = {
 const commands = ['login', 'register', 'explore', 'exchange', 'model', 'permission', 'run', 'config', 'agent', 'help', 'quit'];
 
 const rules: Record<string, Rule> = {
-  login: { flags: ['--username','--email','--password-stdin'] },
+  login: { flags: ['--account','--username','--email','--password-stdin'] },
   register: { flags: ['--username','--email','--password-stdin'] },
   explore: {
     flags: ['--limit', '--scope', '--input-mode', '--output-mode', '--max-fixed-tokens', '--online-only', '--json']

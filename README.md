@@ -542,3 +542,5 @@ tests/
 The CLI and server must upgrade together. Log in with `$login --username <name>` or `$login --email <address>`; an email-shaped username must use `--username`. For automation, pipe the password through standard input and add `--password-stdin`. Never pass passwords in command arguments.
 
 Registration requires `$register --username <name> --email <address>` and a password of at least 12 characters. Complete email verification, then log in. The temporary login session is revoked after obtaining the account API key. Configuration retains the immutable UUID `userId`, public profile fields and API key. Renaming an account does not change its UUID or key ownership.
+
+Login accepts `$login --account <email-or-username> --password-stdin`. Explicit `--username` and `--email` flags remain available for existing integrations. Account ownership continues to use `userId`.
